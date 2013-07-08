@@ -40,8 +40,11 @@
         <configuration>
           <programs>
             <program>
-              <mainClass>org.clueweb.clueweb12.BuildWarcTrecIdMapping</mainClass>
+              <mainClass>org.clueweb.clueweb12.app.BuildWarcTrecIdMapping</mainClass>
               <name>BuildWarcTrecIdMapping</name>
+              <jvmSettings>
+                <maxMemorySize>4g</maxMemorySize>
+              </jvmSettings>
             </program>
           </programs>
         </configuration>

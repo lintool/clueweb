@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12;
+package org.clueweb.clueweb12.data;
 
 import java.io.File;
 import java.io.IOException;
