@@ -39,15 +39,16 @@ import com.google.common.collect.Maps;
 public class ComputeTermStatistics extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(ComputeTermStatistics.class);
 
-  private static enum Records { TOTAL, PAGES, ERRORS };
+  private static enum Records { TOTAL, PAGES, ERRORS, SKIPPED };
 
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
 
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
   
-  private static final int MAX_TOKEN_LENGTH = 64;
-  private static final int MIN_DF_DEFAULT = 100;
+  private static final int MAX_TOKEN_LENGTH = 64;       // Throw away tokens longer than this.
+  private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
+  private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
   private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, PairOfIntLong> {
     private static final Text term = new Text();
@@ -63,7 +64,19 @@ public class ComputeTermStatistics extends Configured implements Tool {
       if (docid != null) {
         context.getCounter(Records.PAGES).increment(1);
         try {
-          String cleaned = Jsoup.parse(doc.getContent()).text();
+          String content = doc.getContent();
+
+          // If the document is excessively long, it usually means that something is wrong (e.g., a
+          // binary object). Skip so the parsing doesn't choke.
+          // As an alternative, we might want to consider putting in a timeout, e.g.,
+          //    http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
+          if ( content.length() > MAX_DOC_LENGTH ) {
+            LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
+            context.getCounter(Records.SKIPPED).increment(1);
+            return;
+          }
+
+          String cleaned = Jsoup.parse(content).text();
           Map<String, Integer> map = Maps.newHashMap();
           for (String term : AnalyzerUtil.parse(ANALYZER, cleaned)) {
             if (term.length() > MAX_TOKEN_LENGTH) {
