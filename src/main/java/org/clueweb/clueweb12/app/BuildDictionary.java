@@ -32,7 +32,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -262,7 +262,7 @@ public class BuildDictionary extends Configured implements Tool {
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.setInputFormatClass(SequenceFileInputFormat.class);
-    job.setOutputFormatClass(SequenceFileOutputFormat.class);
+    job.setOutputFormatClass(NullOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(PairOfIntLong.class);

@@ -1,9 +1,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.commons.cli.CommandLine;
@@ -28,16 +26,14 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.data.ClueWarcRecord;
 import org.clueweb.clueweb12.io.PairOfIntLong;
+import org.clueweb.clueweb12.lucene.AnalyzerUtil;
 import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
 import org.jsoup.Jsoup;
 
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 public class ComputeTermStatistics extends Configured implements Tool {
@@ -47,24 +43,9 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
 
-  static private List<String> parseKeywords(Analyzer analyzer, String keywords) throws IOException {
-    List<String> list = Lists.newArrayList();
-
-    TokenStream tokenStream = analyzer.tokenStream(null, new StringReader(keywords));
-    CharTermAttribute cattr = tokenStream.addAttribute(CharTermAttribute.class);
-    tokenStream.reset();
-    while (tokenStream.incrementToken()) {
-      if (cattr.toString().length() == 0) {
-        continue;
-      }
-      list.add(cattr.toString());
-    }
-    tokenStream.end();
-    tokenStream.close();
-
-    return list;
-  }
-
+  private static final String HADOOP_DF_MIN_OPTION = "df.min";
+  private static final String HADOOP_DF_MAX_OPTION = "df.max";
+  
   private static final int MAX_TOKEN_LENGTH = 64;
   private static final int MIN_DF_DEFAULT = 100;
 
@@ -82,9 +63,9 @@ public class ComputeTermStatistics extends Configured implements Tool {
       if (docid != null) {
         context.getCounter(Records.PAGES).increment(1);
         try {
-          String cleaned = Jsoup.parse(doc.getContent()).text().replaceAll("[\\r\\n]+", " ");
+          String cleaned = Jsoup.parse(doc.getContent()).text();
           Map<String, Integer> map = Maps.newHashMap();
-          for (String term : parseKeywords(ANALYZER, cleaned)) {
+          for (String term : AnalyzerUtil.parse(ANALYZER, cleaned)) {
             if (term.length() > MAX_TOKEN_LENGTH) {
               continue;
             }
@@ -129,12 +110,13 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
   private static class MyReducer extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
     private static final PairOfIntLong output = new PairOfIntLong();
-    private int minDf, maxDf;
+    private int dfMin, dfMax;
 
     @Override
     public void setup(Reducer<Text, PairOfIntLong, Text, PairOfIntLong>.Context context) {
-      minDf = context.getConfiguration().getInt("df.min", MIN_DF_DEFAULT);
-      maxDf = context.getConfiguration().getInt("df.max", Integer.MAX_VALUE);
+      dfMin = context.getConfiguration().getInt(HADOOP_DF_MIN_OPTION, MIN_DF_DEFAULT);
+      dfMax = context.getConfiguration().getInt(HADOOP_DF_MAX_OPTION, Integer.MAX_VALUE);
+      LOG.info("dfMin = " + dfMin);
     }
 
     @Override
@@ -146,7 +128,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
         df += pair.getLeftElement();
         cf += pair.getRightElement();
       }
-      if (df < minDf || df > maxDf) {
+      if (df < dfMin || df > dfMax) {
         return;
       }
       output.set(df, cf);
@@ -156,6 +138,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
+  public static final String DF_MIN_OPTION = "dfMin";
 
   /**
    * Runs this tool.
@@ -168,6 +151,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
         .withDescription("input path").create(INPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg()
+        .withDescription("minimum df").create(DF_MIN_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -199,6 +184,12 @@ public class ComputeTermStatistics extends Configured implements Tool {
     job.setJarByClass(ComputeTermStatistics.class);
 
     job.setNumReduceTasks(100);
+
+    if (cmdline.hasOption(DF_MIN_OPTION)) {
+      int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));
+      LOG.info(" - dfMin: " + dfMin);
+      job.getConfiguration().setInt(HADOOP_DF_MIN_OPTION, dfMin);
+    }
 
     FileInputFormat.setInputPaths(job, input);
     FileOutputFormat.setOutputPath(job, new Path(output));
