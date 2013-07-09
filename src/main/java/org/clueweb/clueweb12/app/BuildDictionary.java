@@ -45,6 +45,9 @@ import com.google.common.collect.Lists;
 public class BuildDictionary extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(BuildDictionary.class);
 
+  private static final String HADOOP_OUTPUT_OPTION = "dictionary.path";
+  private static final String HADOOP_TERMS_COUNT_OPTION = "terms.count";
+
   protected static enum Terms { Total }
 
   public static final String TERMS_DATA = "dictionary.terms";
@@ -76,31 +79,34 @@ public class BuildDictionary extends Configured implements Tool {
       Configuration conf = context.getConfiguration();
       FileSystem fs = FileSystem.get(conf);
 
-      numTerms = conf.getInt("terms.count", 1747035);
+      numTerms = conf.getInt(HADOOP_TERMS_COUNT_OPTION, 0);
+      LOG.info(HADOOP_TERMS_COUNT_OPTION + ": " + numTerms);
+      String basePath = conf.get(HADOOP_OUTPUT_OPTION);
+      LOG.info(HADOOP_OUTPUT_OPTION + ": " + basePath);
 
       terms = new String[numTerms];
       seqNums = new int[numTerms];
       dfs = new int[numTerms];
       cfs = new long[numTerms];
 
-      termsOut = fs.create(new Path(TERMS_DATA), true);
+      termsOut = fs.create(new Path(basePath, TERMS_DATA), true);
 
-      idsOut = fs.create(new Path(TERMS_ID_DATA), true);
+      idsOut = fs.create(new Path(basePath, TERMS_ID_DATA), true);
       idsOut.writeInt(numTerms);
 
-      idsToTermOut = fs.create(new Path(TERMS_ID_MAPPING_DATA), true);
+      idsToTermOut = fs.create(new Path(basePath, TERMS_ID_MAPPING_DATA), true);
       idsToTermOut.writeInt(numTerms);
 
-      dfByTermOut = fs.create(new Path(DF_BY_TERM_DATA), true);
+      dfByTermOut = fs.create(new Path(basePath, DF_BY_TERM_DATA), true);
       dfByTermOut.writeInt(numTerms);
 
-      cfByTermOut = fs.create(new Path(CF_BY_TERM_DATA), true);
+      cfByTermOut = fs.create(new Path(basePath, CF_BY_TERM_DATA), true);
       cfByTermOut.writeInt(numTerms);
 
-      dfByIntOut = fs.create(new Path(DF_BY_ID_DATA), true);
+      dfByIntOut = fs.create(new Path(basePath, DF_BY_ID_DATA), true);
       dfByIntOut.writeInt(numTerms);
 
-      cfByIntOut = fs.create(new Path(CF_BY_ID_DATA), true);
+      cfByIntOut = fs.create(new Path(basePath, CF_BY_ID_DATA), true);
       cfByIntOut.writeInt(numTerms);
       LOG.info("Finished setup.");
     }
@@ -206,6 +212,7 @@ public class BuildDictionary extends Configured implements Tool {
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
+  public static final String COUNT_OPTION = "count";
 
   /**
    * Runs this tool.
@@ -218,6 +225,8 @@ public class BuildDictionary extends Configured implements Tool {
         .withDescription("input path").create(INPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg()
+        .withDescription("number of terms").create(COUNT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -231,7 +240,8 @@ public class BuildDictionary extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
+        !cmdline.hasOption(COUNT_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -247,7 +257,9 @@ public class BuildDictionary extends Configured implements Tool {
 
     Configuration conf = getConf();
 
-    //conf.setInt("term.count", (int) env.readCollectionTermCount());
+    conf.set(HADOOP_OUTPUT_OPTION, output);
+    conf.setInt(HADOOP_TERMS_COUNT_OPTION,
+        Integer.parseInt(cmdline.getOptionValue(COUNT_OPTION)));
     conf.set("mapreduce.map.memory.mb", "2048");
     conf.set("mapreduce.map.java.opts", "-Xmx2048m");
     conf.set("mapreduce.reduce.memory.mb", "2048");

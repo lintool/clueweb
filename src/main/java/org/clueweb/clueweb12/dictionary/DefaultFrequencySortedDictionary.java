@@ -25,17 +25,16 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
   /**
    * Constructs an instance of this dictionary from serialized data files.
    */
-  public DefaultFrequencySortedDictionary(Path prefixPath, Path idsPath, Path idToTermPath,
-      FileSystem fs) throws IOException {
+  public DefaultFrequencySortedDictionary(String basePath, FileSystem fs) throws IOException {
     FSDataInputStream in;
 
-    in = fs.open(prefixPath);
+    in = fs.open(new Path(basePath, BuildDictionary.TERMS_DATA));
     dictionary.readFields(in);
     in.close();
 
     int l = 0;
 
-    in = fs.open(idsPath);
+    in = fs.open(new Path(basePath, BuildDictionary.TERMS_ID_DATA));
     l = in.readInt();
     ids = new int[l];
     for (int i = 0; i < l; i++) {
@@ -43,7 +42,7 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     }
     in.close();
 
-    in = fs.open(idToTermPath);
+    in = fs.open(new Path(basePath, BuildDictionary.TERMS_ID_MAPPING_DATA));
     l = in.readInt();
     idsToTerm = new int[l];
     for (int i = 0; i < l; i++) {
@@ -118,12 +117,8 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     Configuration conf = new Configuration();
     FileSystem fs = FileSystem.get(conf);
 
-    Path termsFilePath = new Path(BuildDictionary.TERMS_DATA);
-    Path termIDsFilePath = new Path(BuildDictionary.TERMS_ID_DATA);
-    Path idToTermFilePath = new Path(BuildDictionary.TERMS_ID_MAPPING_DATA);
-
     DefaultFrequencySortedDictionary dictionary =
-        new DefaultFrequencySortedDictionary(termsFilePath, termIDsFilePath, idToTermFilePath, fs);
+        new DefaultFrequencySortedDictionary(indexPath, fs);
 
     int nTerms = dictionary.size();
     System.out.println("nTerms: " + nTerms);
