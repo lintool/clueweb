@@ -11,7 +11,7 @@ import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileInputFormat;
@@ -35,12 +35,12 @@ public class CountClueWarcRecords extends Configured implements Tool {
   private static enum Records { TOTAL, PAGES };
 
   private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWarcRecord, Writable, Text> {
+      Mapper<Writable, ClueWarcRecord, NullWritable, NullWritable> {
 
     public void configure(JobConf job) {}
 
-    public void map(Writable key, ClueWarcRecord doc, OutputCollector<Writable, Text> output,
-        Reporter reporter) throws IOException {
+    public void map(Writable key, ClueWarcRecord doc,
+        OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
       reporter.incrCounter(Records.TOTAL, 1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -84,17 +84,17 @@ public class CountClueWarcRecords extends Configured implements Tool {
       return -1;
     }
 
-    String path = cmdline.getOptionValue(INPUT_OPTION);
+    String input = cmdline.getOptionValue(INPUT_OPTION);
 
     LOG.info("Tool name: " + CountClueWarcRecords.class.getSimpleName());
-    LOG.info(" - path: " + path);
+    LOG.info(" - input: " + input);
 
     JobConf conf = new JobConf(getConf(), CountClueWarcRecords.class);
-    conf.setJobName(CountClueWarcRecords.class.getSimpleName() + ":" + path);
+    conf.setJobName(CountClueWarcRecords.class.getSimpleName() + ":" + input);
 
     conf.setNumReduceTasks(0);
 
-    FileInputFormat.addInputPaths(conf, path);
+    FileInputFormat.addInputPaths(conf, input);
 
     conf.setInputFormat(ClueWarcInputFormat.class);
     conf.setOutputFormat(NullOutputFormat.class);
