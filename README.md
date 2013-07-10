@@ -22,7 +22,7 @@ $ mvn clean package appassembler:assemble
 Two notes:
 
 + `appassembler:assemble` automatically generates a few launch scripts for you.
-+ the package uses the [Maven Shade plugin](http://maven.apache.org/plugins/maven-shade-plugin/) to create a "fat jar" that includes all dependencies except for Hadoop, so the jar in `target/` can be directly submitted via `hadoop jar ...`.
++ in addition to the normal jar (`clueweb-tools-0.X-SNAPSHOT.jar`), this package uses the [Maven Shade plugin](http://maven.apache.org/plugins/maven-shade-plugin/) to create a "fat jar" (`clueweb-tools-0.X-SNAPSHOT-fatjar.jar`) that includes all dependencies except for Hadoop, so that the jar can be directly submitted via `hadoop jar ...`.
 
 To automatically generate project files for Eclipse:
 
@@ -39,7 +39,7 @@ Counting Records
 For sanity checking and as a "template" for other Hadoop jobs, the package provides a simple program to count WARC records in ClueWeb12:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.app.CountClueWarcRecords -input /path/to/warc/files/
 ```
 
@@ -61,7 +61,7 @@ The next step is to build a dictionary that provides three capabilities:
 To build the dictionary, we must first compute the term statistics:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.app.ComputeTermStatistics \
  -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
  -output term-stats/segment00
@@ -74,7 +74,7 @@ Compute term statistics for all the other segments in the same manner.
 Next, merge all the segment statistics together:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.app.MergeTermStatistics \
  -input term-stats/segment* -output term-stats-all
 ```
@@ -82,7 +82,7 @@ hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
 Finally, build the dictionary:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.app.BuildDictionary \
  -input term-stats-all -output dictionary -count 7160086
 ```
@@ -92,7 +92,7 @@ You need to provide the number of terms in the dictionary via the `-count` optio
 To explore the contents of the dictionary, use this little interactive program:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.dictionary.DefaultFrequencySortedDictionary dictionary
 ```
 
@@ -111,7 +111,7 @@ With the dictionary, we can now convert the entire collection into a sequence of
 To build document vectors, issue the following command:
 
 ```
-hadoop jar target/clueweb-tools-0.1-SNAPSHOT.jar \
+hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
  org.clueweb.clueweb12.app.BuildDocVectors \
  -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
  -output /data/private/clueweb12/derived/docvectors.20130710/segment00 \
