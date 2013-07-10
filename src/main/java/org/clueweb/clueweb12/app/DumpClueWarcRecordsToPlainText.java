@@ -1,9 +1,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.Arrays;
-import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -31,16 +29,14 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.data.ClueWarcRecord;
+import org.clueweb.clueweb12.lucene.AnalyzerUtil;
 import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
 import org.jsoup.Jsoup;
 
 import com.google.common.base.Joiner;
-import com.google.common.collect.Lists;
 
 public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToPlainText.class);
@@ -66,7 +62,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
         try {
           KEY.set(docid);
           String cleaned = Jsoup.parse(doc.getContent()).text().replaceAll("[\\r\\n]+", " ");
-          cleaned = JOINER.join(parseKeywords(ANALYZER, cleaned));
+          cleaned = JOINER.join(AnalyzerUtil.parse(ANALYZER, cleaned));
           VALUE.set(cleaned);
           output.collect(KEY, VALUE);
         } catch (Exception e) {
@@ -77,26 +73,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     }
   }
 
-  static private List<String> parseKeywords(Analyzer analyzer, String keywords) throws IOException {
-    List<String> list = Lists.newArrayList();
-
-    TokenStream tokenStream = analyzer.tokenStream(null, new StringReader(keywords));
-    CharTermAttribute cattr = tokenStream.addAttribute(CharTermAttribute.class);
-    tokenStream.reset();
-    while (tokenStream.incrementToken()) {
-      if (cattr.toString().length() == 0) {
-        continue;
-      }
-      list.add(cattr.toString());
-    }
-    tokenStream.end();
-    tokenStream.close();
-
-    return list;
-  }
-
-  public DumpClueWarcRecordsToPlainText() {
-  }
+  public DumpClueWarcRecordsToPlainText() {}
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
