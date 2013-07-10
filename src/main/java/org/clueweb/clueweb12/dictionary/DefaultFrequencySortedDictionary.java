@@ -3,6 +3,7 @@ package org.clueweb.clueweb12.dictionary;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintStream;
 import java.util.Iterator;
 
 import org.apache.hadoop.conf.Configuration;
@@ -10,6 +11,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.clueweb.clueweb12.app.BuildDictionary;
+import org.clueweb.clueweb12.data.TermStatistics;
 
 /**
  * An implementation of {@link FrequencySortedDictionary}. Term ids start at 1, which corresponds to
@@ -108,32 +110,39 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
    */
   public static void main(String[] args) throws Exception {
     if (args.length != 1) {
-      System.out.println("usage: [index-path]");
+      System.err.println("usage: [index-path]");
       System.exit(-1);
     }
 
-    String indexPath = args[0];
+    String path = args[0];
+
+    PrintStream out = new PrintStream(System.out, true, "UTF-8");
 
     Configuration conf = new Configuration();
     FileSystem fs = FileSystem.get(conf);
 
     DefaultFrequencySortedDictionary dictionary =
-        new DefaultFrequencySortedDictionary(indexPath, fs);
+        new DefaultFrequencySortedDictionary(path, fs);
 
     int nTerms = dictionary.size();
-    System.out.println("nTerms: " + nTerms);
+    out.println("number of terms: " + nTerms);
 
-    System.out.println(" \"term word\" to lookup termid; \"termid 234\" to lookup term");
+    TermStatistics stats = new TermStatistics(new Path(path), fs);
+    out.println("max df = " + stats.getMaxDf() + ", termid " + stats.getMaxDfTerm());
+    out.println("max cf = " + stats.getMaxCf() + ", termid " + stats.getMaxCfTerm());
+    out.println("");
+
+    out.println(" \"term word\" to lookup termid; \"termid 234\" to lookup term");
     String cmd = null;
     BufferedReader stdin = new BufferedReader(new InputStreamReader(System.in));
-    System.out.print("lookup > ");
+    out.print("lookup > ");
     while ((cmd = stdin.readLine()) != null) {
 
       String[] tokens = cmd.split("\\s+");
 
       if (tokens.length != 2) {
-        System.out.println("Error: unrecognized command!");
-        System.out.print("lookup > ");
+        out.println("Error: unrecognized command!");
+        out.print("lookup > ");
 
         continue;
       }
@@ -143,24 +152,28 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
         try {
           termid = Integer.parseInt(tokens[1]);
         } catch (Exception e) {
-          System.out.println("Error: invalid termid!");
-          System.out.print("lookup > ");
+          out.println("Error: invalid termid!");
+          out.print("lookup > ");
 
           continue;
         }
 
-        System.out.println("termid=" + termid + ", term=" + dictionary.getTerm(termid));
+        out.println("termid=" + termid + ", term=" + dictionary.getTerm(termid));
+        out.println("  df = " + stats.getDf(termid) + ", cf = " + stats.getCf(termid));
       } else if (tokens[0].equals("term")) {
         String term = tokens[1];
 
-        System.out.println("term=" + term + ", termid=" + dictionary.getId(term));
+        out.println("term=" + term + ", termid=" + dictionary.getId(term));
+        out.println("  df = " + stats.getDf(dictionary.getId(term)) +
+            ", cf = " + stats.getCf(dictionary.getId(term)));
       } else {
-        System.out.println("Error: unrecognized command!");
-        System.out.print("lookup > ");
+        out.println("Error: unrecognized command!");
+        out.print("lookup > ");
         continue;
       }
 
-      System.out.print("lookup > ");
+      out.print("lookup > ");
     }
+    out.close();
   }
 }
