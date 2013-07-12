@@ -19,7 +19,7 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.clueweb.clueweb12.data.ClueWarcRecord;
+import org.clueweb.data.ClueWarcRecord;
 
 public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcRecord> {
   @Override

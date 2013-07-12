@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.dictionary;
+package org.clueweb.dictionary;
 
 /**
  * A dictionary provides a bidirectional mapping terms (Strings) and term ids (integers). The

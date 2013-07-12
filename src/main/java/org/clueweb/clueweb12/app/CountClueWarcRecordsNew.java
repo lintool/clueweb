@@ -21,8 +21,8 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.data.ClueWarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
+import org.clueweb.data.ClueWarcRecord;
 
 public class CountClueWarcRecordsNew extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(CountClueWarcRecordsNew.class);

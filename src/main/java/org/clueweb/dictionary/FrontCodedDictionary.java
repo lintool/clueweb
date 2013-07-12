@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.dictionary;
+package org.clueweb.dictionary;
 
 import it.unimi.dsi.util.FrontCodedStringList;
 import it.unimi.dsi.util.ShiftAddXorSignedStringMap;

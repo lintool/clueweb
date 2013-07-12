@@ -31,7 +31,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.apache.lucene.util.Version;
 import org.apache.tools.bzip2.CBZip2InputStream;
-import org.clueweb.clueweb12.data.WarcTrecIdMapping;
+import org.clueweb.data.WarcTrecIdMapping;
 
 public class BuildWarcTrecIdMapping {
   private static final Logger LOG = Logger.getLogger(BuildWarcTrecIdMapping.class);

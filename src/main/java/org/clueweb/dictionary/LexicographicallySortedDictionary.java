@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.dictionary;
+package org.clueweb.dictionary;
 
 /**
  * A lexicographically-sorted dictionary. That is, smaller term ids correspond to terms

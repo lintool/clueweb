@@ -11,7 +11,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.clueweb.clueweb12.data.WarcTrecIdMapping;
+import org.clueweb.data.WarcTrecIdMapping;
 
 public class LookupWarcTrecIdMapping extends Configured implements Tool {
   private static final String INDEX_OPTION = "index";

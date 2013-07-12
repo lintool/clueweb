@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.util;
+package org.clueweb.util;
 
 public class QuickSort {
 

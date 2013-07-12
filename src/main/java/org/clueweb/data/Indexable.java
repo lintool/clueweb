@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.data;
+package org.clueweb.data;
 
 import org.apache.hadoop.io.Writable;
 

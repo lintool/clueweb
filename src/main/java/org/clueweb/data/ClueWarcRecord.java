@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.data;
+package org.clueweb.data;
 
 /*
  * Cloud9: A Hadoop toolkit for working with big data

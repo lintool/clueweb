@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.dictionary;
+package org.clueweb.dictionary;
 
 /**
  * A frequency-sorted dictionary. That is, smaller term ids are assigned to more

@@ -25,8 +25,8 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.data.DocVector;
-import org.clueweb.clueweb12.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.data.DocVector;
+import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;

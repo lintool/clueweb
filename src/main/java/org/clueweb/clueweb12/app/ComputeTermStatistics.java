@@ -28,8 +28,8 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.data.ClueWarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
+import org.clueweb.data.ClueWarcRecord;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;

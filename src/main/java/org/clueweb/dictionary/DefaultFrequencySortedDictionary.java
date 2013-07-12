@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.dictionary;
+package org.clueweb.dictionary;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -11,7 +11,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.clueweb.clueweb12.app.BuildDictionary;
-import org.clueweb.clueweb12.data.TermStatistics;
+import org.clueweb.data.TermStatistics;
 
 /**
  * An implementation of {@link FrequencySortedDictionary}. Term ids start at 1, which corresponds to

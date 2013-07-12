@@ -36,8 +36,8 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.dictionary.DictionaryTransformationStrategy;
-import org.clueweb.clueweb12.util.QuickSort;
+import org.clueweb.dictionary.DictionaryTransformationStrategy;
+import org.clueweb.util.QuickSort;
 
 import tl.lin.data.pair.PairOfIntLong;
 

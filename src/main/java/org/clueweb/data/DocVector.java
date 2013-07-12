@@ -1,4 +1,4 @@
-package org.clueweb.clueweb12.data;
+package org.clueweb.data;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
