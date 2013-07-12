@@ -23,7 +23,8 @@ import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.io.PairOfIntLong;
+
+import tl.lin.data.pair.PairOfIntLong;
 
 public class MergeTermStatistics extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(MergeTermStatistics.class);

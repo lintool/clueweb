@@ -130,6 +130,7 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     TermStatistics stats = new TermStatistics(new Path(path), fs);
     out.println("max df = " + stats.getMaxDf() + ", termid " + stats.getMaxDfTerm());
     out.println("max cf = " + stats.getMaxCf() + ", termid " + stats.getMaxCfTerm());
+    out.println("collection size = " + stats.getCollectionSize());
     out.println("");
 
     out.println(" \"term word\" to lookup termid; \"termid 234\" to lookup term");

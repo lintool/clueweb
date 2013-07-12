@@ -33,9 +33,10 @@ import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.data.ClueWarcRecord;
 import org.clueweb.clueweb12.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.clueweb12.lucene.AnalyzerUtil;
 import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
 import org.jsoup.Jsoup;
+
+import tl.lin.lucene.AnalyzerUtils;
 
 public class BuildDocVectors extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(BuildDocVectors.class);
@@ -86,7 +87,7 @@ public class BuildDocVectors extends Configured implements Tool {
           }
 
           String cleaned = Jsoup.parse(content).text();
-          List<String> tokens = AnalyzerUtil.parse(ANALYZER, cleaned);
+          List<String> tokens = AnalyzerUtils.parse(ANALYZER, cleaned);
 
           ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
           DataOutputStream dataOut = new DataOutputStream(bytesOut);

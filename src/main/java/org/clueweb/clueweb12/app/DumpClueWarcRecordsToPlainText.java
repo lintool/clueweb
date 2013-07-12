@@ -32,9 +32,10 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.data.ClueWarcRecord;
-import org.clueweb.clueweb12.lucene.AnalyzerUtil;
 import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
 import org.jsoup.Jsoup;
+
+import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.base.Joiner;
 
@@ -62,7 +63,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
         try {
           KEY.set(docid);
           String cleaned = Jsoup.parse(doc.getContent()).text().replaceAll("[\\r\\n]+", " ");
-          cleaned = JOINER.join(AnalyzerUtil.parse(ANALYZER, cleaned));
+          cleaned = JOINER.join(AnalyzerUtils.parse(ANALYZER, cleaned));
           VALUE.set(cleaned);
           output.collect(KEY, VALUE);
         } catch (Exception e) {

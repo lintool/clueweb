@@ -15,7 +15,8 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.clueweb.clueweb12.lucene.FileSystemDirectory;
+
+import tl.lin.lucene.FileSystemDirectory;
 
 public class WarcTrecIdMapping {
   private static final Logger LOG = Logger.getLogger(WarcTrecIdMapping.class);

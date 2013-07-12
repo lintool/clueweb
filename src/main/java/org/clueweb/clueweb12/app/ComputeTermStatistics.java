@@ -29,10 +29,11 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.data.ClueWarcRecord;
-import org.clueweb.clueweb12.io.PairOfIntLong;
-import org.clueweb.clueweb12.lucene.AnalyzerUtil;
 import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
 import org.jsoup.Jsoup;
+
+import tl.lin.data.pair.PairOfIntLong;
+import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.collect.Maps;
 
@@ -78,7 +79,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
           String cleaned = Jsoup.parse(content).text();
           Map<String, Integer> map = Maps.newHashMap();
-          for (String term : AnalyzerUtil.parse(ANALYZER, cleaned)) {
+          for (String term : AnalyzerUtils.parse(ANALYZER, cleaned)) {
             if (term.length() > MAX_TOKEN_LENGTH) {
               continue;
             }
