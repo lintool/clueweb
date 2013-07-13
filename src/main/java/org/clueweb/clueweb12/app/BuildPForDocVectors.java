@@ -48,7 +48,6 @@ public class BuildPForDocVectors extends Configured implements Tool {
   private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, IntArrayWritable> {
     private static final Text DOCID = new Text();
     private static final IntArrayWritable DOC = new IntArrayWritable();
-    private static final IntArrayWritable EMPTY = new IntArrayWritable();
 
     private DefaultFrequencySortedDictionary dictionary;
 
@@ -80,7 +79,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
           if ( content.length() > MAX_DOC_LENGTH ) {
             LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
             context.getCounter(Records.TOO_LONG).increment(1);
-            context.write(DOCID, EMPTY);
+            PForDocVector.toIntArrayWritable(DOC, new int[] {}, 0);
+            context.write(DOCID, DOC);
             return;
           }
 
@@ -103,8 +103,10 @@ public class BuildPForDocVectors extends Configured implements Tool {
         catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
           LOG.info("Error caught processing " + docid);
+          DOC.setArray(new int[] {});  // Clean up possible corrupted data
           context.getCounter(Records.ERRORS).increment(1);
-          context.write(DOCID, EMPTY);
+          PForDocVector.toIntArrayWritable(DOC, new int[] {}, 0);
+          context.write(DOCID, DOC);
         }
       }
     }

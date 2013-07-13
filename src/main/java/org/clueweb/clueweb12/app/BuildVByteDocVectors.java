@@ -48,7 +48,6 @@ public class BuildVByteDocVectors extends Configured implements Tool {
   private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, BytesWritable> {
     private static final Text DOCID = new Text();
     private static final BytesWritable DOC = new BytesWritable();
-    private static final BytesWritable EMPTY = new BytesWritable();
 
     private DefaultFrequencySortedDictionary dictionary;
 
@@ -78,9 +77,10 @@ public class BuildVByteDocVectors extends Configured implements Tool {
           // As an alternative, we might want to consider putting in a timeout, e.g.,
           //    http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
           if ( content.length() > MAX_DOC_LENGTH ) {
-            LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
+            DOC.set(new byte[] {}, 0, 0);  // Clean up possible corrupted data
             context.getCounter(Records.TOO_LONG).increment(1);
-            context.write(DOCID, EMPTY);
+            VByteDocVector.toBytesWritable(DOC, new int[]{}, 0);
+            context.write(DOCID, DOC);
             return;
           }
 
@@ -104,7 +104,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
           // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
           LOG.info("Error caught processing " + docid);
           context.getCounter(Records.ERRORS).increment(1);
-          context.write(DOCID, EMPTY);
+          VByteDocVector.toBytesWritable(DOC, new int[]{}, 0);
+          context.write(DOCID, DOC);
         }
       }
     }
