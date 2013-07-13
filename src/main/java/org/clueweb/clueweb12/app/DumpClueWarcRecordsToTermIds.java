@@ -1,7 +1,5 @@
 package org.clueweb.clueweb12.app;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
@@ -16,15 +14,13 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.io.WritableUtils;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
@@ -38,8 +34,8 @@ import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
 
-public class BuildDocVectors extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(BuildDocVectors.class);
+public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToTermIds.class);
 
   private static enum Records { TOTAL, PAGES, ERRORS, TOO_LONG };
 
@@ -47,10 +43,10 @@ public class BuildDocVectors extends Configured implements Tool {
 
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, BytesWritable> {
+  private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, Text> {
     private static final Text DOCID = new Text();
-    private static final BytesWritable BYTES = new BytesWritable();
-    private static final BytesWritable EMPTY = new BytesWritable();
+    private static final Text DOC = new Text();
+    private static final Text EMPTY = new Text();
 
     private DefaultFrequencySortedDictionary dictionary;
 
@@ -89,27 +85,20 @@ public class BuildDocVectors extends Configured implements Tool {
           String cleaned = Jsoup.parse(content).text();
           List<String> tokens = AnalyzerUtils.parse(ANALYZER, cleaned);
 
-          ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
-          DataOutputStream dataOut = new DataOutputStream(bytesOut);
-
           int len = 0;
+          int[] termids = new int[tokens.size()];
           for (String token : tokens) {
             int id = dictionary.getId(token);
             if (id != -1) {
-              WritableUtils.writeVInt(dataOut, id);
+              termids[len] = id;
               len++;
             }
           }
 
-          // Prepend the document length
-          ByteArrayOutputStream finalOut = new ByteArrayOutputStream();
-          DataOutputStream finalStream = new DataOutputStream(finalOut);
-          WritableUtils.writeVInt(finalStream, len);
-          finalStream.write(bytesOut.toByteArray());
-          
-          byte[] bytes = finalOut.toByteArray();
-          BYTES.set(bytes, 0, bytes.length);
-          context.write(DOCID, BYTES);
+          int[] copy = new int[len];
+          System.arraycopy(termids, 0, copy, 0, len);
+          DOC.set(Arrays.toString(copy));
+          context.write(DOCID, DOC);
         }
         catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
@@ -166,10 +155,10 @@ public class BuildDocVectors extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 
-    Job job = new Job(getConf(), BuildDocVectors.class.getSimpleName() + ":" + input);
-    job.setJarByClass(BuildDocVectors.class);
+    Job job = new Job(getConf(), DumpClueWarcRecordsToTermIds.class.getSimpleName() + ":" + input);
+    job.setJarByClass(DumpClueWarcRecordsToTermIds.class);
 
-    LOG.info("Tool name: " + BuildDocVectors.class.getSimpleName());
+    LOG.info("Tool name: " + DumpClueWarcRecordsToTermIds.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
@@ -188,12 +177,12 @@ public class BuildDocVectors extends Configured implements Tool {
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
 
     job.setInputFormatClass(ClueWarcInputFormat.class);
-    job.setOutputFormatClass(SequenceFileOutputFormat.class);
+    job.setOutputFormatClass(TextOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
-    job.setMapOutputValueClass(BytesWritable.class);
+    job.setMapOutputValueClass(Text.class);
     job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(BytesWritable.class);
+    job.setOutputValueClass(Text.class);
 
     job.setMapperClass(MyMapper.class);
 
@@ -210,8 +199,8 @@ public class BuildDocVectors extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + BuildDocVectors.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DumpClueWarcRecordsToTermIds.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new BuildDocVectors(), args);
+    ToolRunner.run(new DumpClueWarcRecordsToTermIds(), args);
   }
 }
