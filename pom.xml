@@ -3,7 +3,7 @@
   <groupId>org.clueweb</groupId>
   <artifactId>clueweb-tools</artifactId>
   <packaging>jar</packaging>
-  <version>0.2-SNAPSHOT</version>
+  <version>0.2</version>
   <name>clueweb-tools</name>
   <description>Hadoop tools for working with the ClueWeb 2012 collection</description>
   <url>http://clueweb.org/</url>
