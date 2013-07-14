@@ -18,6 +18,7 @@ package org.clueweb.clueweb12.app;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -29,76 +30,57 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
+import org.clueweb.data.VByteDocVector;
+import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 
-import tl.lin.data.pair.PairOfIntLong;
+import com.google.common.base.Joiner;
+import com.google.common.collect.Lists;
 
-public class MergeTermStatistics extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(MergeTermStatistics.class);
+public class ProcessVByteDocVectors extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(ProcessVByteDocVectors.class);
 
-  private static final String HADOOP_DF_MIN_OPTION = "df.min";
-  private static final String HADOOP_DF_MAX_OPTION = "df.max";
+  private static final Joiner JOINER = Joiner.on("|");
 
-  private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
+  private static class MyMapper extends Mapper<Text, BytesWritable, Text, Text> {
+    private static final VByteDocVector DOC = new VByteDocVector();
 
-  private static class MyCombiner extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
-    private static final PairOfIntLong output = new PairOfIntLong();
-
-    @Override
-    public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
-      int df = 0;
-      long cf = 0;
-      for (PairOfIntLong pair : values) {
-        df += pair.getLeftElement();
-        cf += pair.getRightElement();
-      }
-
-      output.set(df, cf);
-      context.write(key, output);
-    }
-  }
-
-  private static class MyReducer extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
-    private static final PairOfIntLong output = new PairOfIntLong();
-    private int dfMin, dfMax;
+    private DefaultFrequencySortedDictionary dictionary;
 
     @Override
-    public void setup(Reducer<Text, PairOfIntLong, Text, PairOfIntLong>.Context context) {
-      dfMin = context.getConfiguration().getInt(HADOOP_DF_MIN_OPTION, MIN_DF_DEFAULT);
-      dfMax = context.getConfiguration().getInt(HADOOP_DF_MAX_OPTION, Integer.MAX_VALUE);
-      LOG.info("dfMin = " + dfMin);
+    public void setup(Context context) throws IOException {
+      FileSystem fs = FileSystem.get(context.getConfiguration());
+      String path = context.getConfiguration().get(DICTIONARY_OPTION);
+      dictionary = new DefaultFrequencySortedDictionary(path, fs);
     }
 
     @Override
-    public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
-      int df = 0;
-      long cf = 0;
-      for (PairOfIntLong pair : values) {
-        df += pair.getLeftElement();
-        cf += pair.getRightElement();
+    public void map(Text key, BytesWritable bytes, Context context)
+        throws IOException, InterruptedException {
+      VByteDocVector.fromBytesWritable(bytes, DOC);
+
+      List<String> terms = Lists.newArrayList();
+      for (int termid : DOC.getTermIds()) {
+        terms.add(dictionary.getTerm(termid));
       }
-      if (df < dfMin || df > dfMax) {
-        return;
-      }
-      output.set(df, cf);
-      context.write(key, output);
+
+      context.write(key, new Text(JOINER.join(terms)));
     }
   }
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
-  public static final String DF_MIN_OPTION = "dfMin";
+  public static final String DICTIONARY_OPTION = "dictionary";
 
   /**
    * Runs this tool.
@@ -111,8 +93,8 @@ public class MergeTermStatistics extends Configured implements Tool {
         .withDescription("input path").create(INPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg()
-        .withDescription("minimum df").create(DF_MIN_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("dictionary").create(DICTIONARY_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -126,7 +108,8 @@ public class MergeTermStatistics extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
+        !cmdline.hasOption(DICTIONARY_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -135,35 +118,30 @@ public class MergeTermStatistics extends Configured implements Tool {
 
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 
-    LOG.info("Tool name: " + MergeTermStatistics.class.getSimpleName());
+    LOG.info("Tool name: " + ProcessVByteDocVectors.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
+    LOG.info(" - dictionary: " + dictionary);
 
-    Job job = new Job(getConf(), MergeTermStatistics.class.getSimpleName() + ":" + input);
-    job.setJarByClass(MergeTermStatistics.class);
+    Job job = new Job(getConf(), ProcessVByteDocVectors.class.getSimpleName() + ":" + input);
+    job.setJarByClass(ProcessVByteDocVectors.class);
 
-    job.setNumReduceTasks(100);
-
-    if (cmdline.hasOption(DF_MIN_OPTION)) {
-      int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));
-      LOG.info(" - dfMin: " + dfMin);
-      job.getConfiguration().setInt(HADOOP_DF_MIN_OPTION, dfMin);
-    }
+    job.setNumReduceTasks(0);
 
     FileInputFormat.setInputPaths(job, input);
     FileOutputFormat.setOutputPath(job, new Path(output));
 
+    job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
+
     job.setInputFormatClass(SequenceFileInputFormat.class);
-    job.setOutputFormatClass(SequenceFileOutputFormat.class);
+    job.setOutputFormatClass(TextOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
-    job.setMapOutputValueClass(PairOfIntLong.class);
-    job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(PairOfIntLong.class);
+    job.setMapOutputValueClass(Text.class);
 
-    job.setCombinerClass(MyCombiner.class);
-    job.setReducerClass(MyReducer.class);
+    job.setMapperClass(MyMapper.class);
 
     FileSystem.get(getConf()).delete(new Path(output), true);
 
@@ -178,8 +156,8 @@ public class MergeTermStatistics extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + MergeTermStatistics.class.getCanonicalName() + " with args "
+    LOG.info("Running " + ProcessVByteDocVectors.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new MergeTermStatistics(), args);
+    ToolRunner.run(new ProcessVByteDocVectors(), args);
   }
 }

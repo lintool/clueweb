@@ -1,3 +1,10 @@
+Version 0.2
+===========
+July 14, 2013
+
++ Refactored package layout, separating ClueWeb12-specific classes
++ Added PFor-compressed DocVector, in addition to the previous VByte-compressed version
+
 Version 0.1
 ===========
 July 10, 2013

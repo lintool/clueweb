@@ -3,7 +3,6 @@ ClueWeb Tools
 
 This is a collection of tools for manipulating the [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
-
 Getting Stated
 --------------
 
@@ -108,24 +107,34 @@ Building Document Vectors
 
 With the dictionary, we can now convert the entire collection into a sequence of document vectors, where each document vector is represented by a sequence of termids; the termids map to the sequence of terms that comprise the document. These document vectors are much more compact and much faster to scan for processing purposes.
 
-To build document vectors, issue the following command:
+The document vector is represented by the interface `org.clueweb.data.DocVector`. Currently, there are two concrete implementations:
+
++ `VByteDocVector`, which uses Hadoop's built-in utilities for writing variable-length integers (what Hadoop calls VInt).
++ `PForDocVector`, which uses PFor compression from Daniel Lemire's [JavaFastPFOR](https://github.com/lemire/JavaFastPFOR/) package.
+
+To build document vectors, use either `BuildVByteDocVectors` or `BuildPForDocVectors`:
 
 ```
 hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.BuildDocVectors \
+ org.clueweb.clueweb12.app.Build{VByte,PFor}DocVectors \
  -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
- -output /data/private/clueweb12/derived/docvectors.20130710/segment00 \
- -dictionary /data/private/clueweb12/derived/dictionary.20130710 \
+ -output /data/private/clueweb12/derived/docvectors/segment00 \
+ -dictionary /data/private/clueweb12/derived/dictionary \
  -reducers 100
 ```
 
 Once again, it's advisable to run on a segment at a time in order to keep the Hadoop job sizes manageable. Note that the program run identity reducers to repartition the document vectors into 100 parts (to avoid the small files problem).
 
-The output directory will contain `SequenceFile`s, with a `Text` containing the WARC-TREC-ID as the key, and a `BytesWritable` object as the value. The value contains a stream of integers written using Hadoop's VInt util (for writing variable-length integers).
+The output directory will contain `SequenceFile`s, with a `Text` containing the WARC-TREC-ID as the key. For VByte, the value will be a `BytesWritable` object; for PFor, the value will be an `IntArrayWritable` object.
 
-To read back these document vectors, check out `org.clueweb.clueweb12.app.ProcessDocVectors` for some demo code.
+To process these document vectors, either use `ProcessVByteDocVectors` or `ProcessPForDocVectors` in the `org.clueweb.clueweb12.app` package, which provides sample code for consuming these document vectors and converting the termids back into terms.
 
-The entire ClueWeb12 collection, converted into document vectors, occupies roughly 1.08 TB (compared to 5.54 TB compressed in the original WARC files).
+Size comparisons, on the entire ClueWeb12 collection:
+
++ 5.54 TB: original compressed WARC files
++ 1.08 TB: repackaged as `VByteDocVector`s
++ 0.86 TB: repackaged as `PForDocVector`s
++ ~1.6 TB: uncompressed termids (collection size is around ~400 billion terms)
 
 License
 -------
