@@ -48,12 +48,15 @@ import org.clueweb.data.ClueWarcRecord;
 public class CountClueWarcRecords extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(CountClueWarcRecords.class);
 
-  private static enum Records { TOTAL, PAGES };
+  private static enum Records {
+    TOTAL, PAGES
+  };
 
   private static class MyMapper extends MapReduceBase implements
       Mapper<Writable, ClueWarcRecord, NullWritable, NullWritable> {
 
-    public void configure(JobConf job) {}
+    public void configure(JobConf job) {
+    }
 
     public void map(Writable key, ClueWarcRecord doc,
         OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
@@ -78,8 +81,8 @@ public class CountClueWarcRecords extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();

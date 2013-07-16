@@ -17,6 +17,7 @@
 package org.clueweb.clueweb12.app;
 
 import it.unimi.dsi.sux4j.mph.TwoStepsLcpMonotoneMinimalPerfectHashFunction;
+
 import it.unimi.dsi.util.FrontCodedStringList;
 import it.unimi.dsi.util.ShiftAddXorSignedStringMap;
 
