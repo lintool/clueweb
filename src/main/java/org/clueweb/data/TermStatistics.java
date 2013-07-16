@@ -17,6 +17,7 @@
 package org.clueweb.data;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -49,6 +50,59 @@ public class TermStatistics {
   public TermStatistics(Path file) throws IOException {
     this(file, FileSystem.get(new Configuration()));
   }
+  
+  public TermStatistics(Path file, HashMap<Integer, Long> cfMap, HashMap<Integer,Integer> dfMap) throws IOException {
+    this(file, FileSystem.get(new Configuration()), cfMap, dfMap);
+  }
+  
+  /*
+   * read selected term statistics into the hashmaps (instead of all)
+   * @authors Claudia
+   */
+  public TermStatistics(Path file, FileSystem fs, HashMap<Integer, Long> cfMap, HashMap<Integer,Integer> dfMap) throws IOException {
+    Preconditions.checkNotNull(file);
+    Preconditions.checkNotNull(fs);
+
+    dfs = null;
+    cfs = null;
+    
+    FSDataInputStream in = fs.open(new Path(file, BuildDictionary.CF_BY_ID_DATA));
+    this.numTerms = in.readInt();
+
+    for (int i = 0; i < numTerms; i++) {
+      long cf = WritableUtils.readVLong(in);
+      int termid = i + 1;
+      
+      if(cfMap.containsKey(termid))
+        cfMap.put(termid, cf);
+      collectionSize += cf;
+      if (cf > maxCf) {
+        maxCf = cf;
+        maxCfTerm = i + 1;
+      }
+    }
+    in.close();
+
+    in = fs.open(new Path(file, BuildDictionary.DF_BY_ID_DATA));
+    if (numTerms != in.readInt() ) {
+      throw new IOException("df data and cf data should have the same number of entries!");
+    }
+
+    for (int i = 0; i < numTerms; i++) {
+      int df = WritableUtils.readVInt(in);
+      int termid = i + 1;
+      if(dfMap.containsKey(termid))
+        dfMap.put(termid, df);
+
+      if (df > maxDf) {
+        maxDf = df;
+        maxDfTerm = i + 1;
+      }
+    }
+
+    in.close();
+  }
+
 
   /**
    * Creates a {@code CfTable} object.

@@ -24,6 +24,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -55,7 +56,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.data.SelectedTermStatistics;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.data.VByteDocVector;
@@ -76,7 +76,7 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
     private static final VByteDocVector DOC = new VByteDocVector();
 
     private DefaultFrequencySortedDictionary dictionary;
-    private SelectedTermStatistics colstats;
+    private TermStatistics colstats;
     private HashMap<Integer,Long> cfMap;
     private HashMap<Integer,Integer> dfMap;
     private double lambda;
@@ -140,9 +140,8 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
       fsin.close();
       br.close();
       
-      colstats = new SelectedTermStatistics(new Path(context.getConfiguration().get(COLLECTION_STATS)),cfMap,dfMap);     
+      colstats = new TermStatistics(new Path(context.getConfiguration().get(COLLECTION_STATS)),cfMap,dfMap);     
 
-      // sanity check, write query terms for each query back to the LOG object
       LOG.info("Number of queries read: " + termidQuerySet.size());
     }
 
@@ -164,8 +163,15 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
           continue;
         double tf = tfMap.get(termid);
 
+        double df = dfMap.get(termid);
+        if(df<0)
+        {
+          LOG.error("dfMap contains termid with a value of -1");
+          df=1;
+        }
+        
         double mlProb = tf / (double) DOC.getLength();        
-        double colProb = (double) dfMap.get(termid) / (double) colstats.getCollectionSize();
+        double colProb = df / (double) colstats.getCollectionSize();
         double prob = Math.log(lambda * mlProb + (1.0 - lambda) * colProb);
 
         HashSet<Integer> queries = termidQuerySet.get(termid);
