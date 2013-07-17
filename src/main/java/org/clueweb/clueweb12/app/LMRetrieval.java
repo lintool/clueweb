@@ -1,6 +1,7 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
 
+
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -16,9 +17,19 @@
  * 
  * @author: Claudia
  * 
- * vbdocvectr: term term term term
+ * Implementation of language modeling. Retrieval parameter determines the type: <1 means Jelineck-Mercer and >1 means Dirichlet.
  * 
- * query: convert to termids
+ * Approach:
+ * 
+ * (1) read the queries and convert into termids (based on the dictionary)
+ * (2) read the term statistics file (only keep sumCF and the cf values of all termids found in (1))
+ * (3) MyMapper: walk over all document vectors and as soon as a termid is found which occurs in a query,
+ * 		output: (qid,(docid,score))
+ * (4) MyReducer: all scores for one query appear at one reduce() step; sum up the scores for each docid and write out the topk docids
+ * 		with the highest scores - a priority queue ensures that only the topk remain, but within this interval they remain unsorted
+ * 
+ * TODO: combiner!
+ * TODO: Dirichlet!
  */
 
 package org.clueweb.clueweb12.app;
@@ -82,7 +93,7 @@ public class LMRetrieval extends Configured implements Tool {
 		private HashMap<Integer, Long> cfMap;
 		private HashMap<String,Integer> termToTermidMap;
 		private long cfSum;
-		private double lambda;
+		private double smoothing;
 
 		// key: termid, hashset value: qids where the termid occurs in
 		private HashMap<Integer, HashSet<Integer>> termidQuerySet;
@@ -101,13 +112,13 @@ public class LMRetrieval extends Configured implements Tool {
 			cfSum = 0l;
 
 			try {
-				lambda = Double.parseDouble(context.getConfiguration().get(
-						LAMBDA));
+				smoothing = Double.parseDouble(context.getConfiguration().get(
+						SMOOTHING));
 			} catch (NumberFormatException e) {
 				LOG.error("Lambda is expected to parse into a double, found: "
-						+ context.getConfiguration().get(LAMBDA));
+						+ context.getConfiguration().get(SMOOTHING));
 				LOG.info("Lambda set to 0.5 due to an error in parsing!");
-				lambda = 0.5;
+				smoothing = 0.5;
 			}
 			// read the queries from file
 			termidQuerySet = Maps.newHashMap();
@@ -196,8 +207,16 @@ public class LMRetrieval extends Configured implements Tool {
 				double mlProb = tf / (double) DOC.getLength();
 				double colProb = (double)cf/(double)cfSum;
 				
-				double prob = Math.log(lambda * mlProb + (1.0 - lambda)
-						* colProb);
+				double prob = 0.0;
+				
+				//JM smoothing
+				if(smoothing<=1.0)
+					prob = smoothing * mlProb + (1.0 - smoothing)* colProb;
+				//Dirichlet smoothing
+				else
+					prob = (double)(tf + smoothing * colProb)/(double)( DOC.getLength() + smoothing );
+				
+				prob = Math.log(prob);
 
 				HashSet<Integer> queries = termidQuerySet.get(termid);
 				for (Integer query : queries) {
@@ -270,7 +289,7 @@ public class LMRetrieval extends Configured implements Tool {
 	public static final String DICTIONARY_OPTION = "dictionary";
 	public static final String QUERIES_OPTION = "queries";
 	public static final String COLLECTION_STATS = "colstats";
-	public static final String LAMBDA = "lambda";
+	public static final String SMOOTHING = "smoothing";
 	public static final String TOPK = "topk";
 
 	/**
@@ -291,7 +310,7 @@ public class LMRetrieval extends Configured implements Tool {
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("colstats").create(COLLECTION_STATS));
 		options.addOption(OptionBuilder.withArgName("double").hasArg()
-				.withDescription("lambda").create(LAMBDA));
+				.withDescription("smoothing").create(SMOOTHING));
 		options.addOption(OptionBuilder.withArgName("int").hasArg()
 				.withDescription("topk").create(TOPK));
 
@@ -313,7 +332,7 @@ public class LMRetrieval extends Configured implements Tool {
 				|| !cmdline.hasOption(DICTIONARY_OPTION)
 				|| !cmdline.hasOption(QUERIES_OPTION)
 				|| !cmdline.hasOption(COLLECTION_STATS)
-				|| !cmdline.hasOption(LAMBDA) || !cmdline.hasOption(TOPK)) {
+				|| !cmdline.hasOption(SMOOTHING) || !cmdline.hasOption(TOPK)) {
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp(this.getClass().getName(), options);
 			ToolRunner.printGenericCommandUsage(System.out);
@@ -325,7 +344,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 		String queries = cmdline.getOptionValue(QUERIES_OPTION);
 		String colstats = cmdline.getOptionValue(COLLECTION_STATS);
-		String lambda = cmdline.getOptionValue(LAMBDA);
+		String smoothing = cmdline.getOptionValue(SMOOTHING);
 		String topk = cmdline.getOptionValue(TOPK);
 
 		LOG.info("Tool name: "
@@ -335,14 +354,14 @@ public class LMRetrieval extends Configured implements Tool {
 		LOG.info(" - dictionary: " + dictionary);
 		LOG.info(" - queries: " + queries);
 		LOG.info(" - colstats: " + colstats);
-		LOG.info(" - lambda: " + lambda);
+		LOG.info(" - smoothing: " + smoothing);
 		LOG.info(" - topk: " + topk);
 
 		Configuration conf = getConf();
 		conf.set(DICTIONARY_OPTION, dictionary);
 		conf.set(QUERIES_OPTION, queries);
 		conf.set(COLLECTION_STATS, colstats);
-		conf.set(LAMBDA, lambda);
+		conf.set(SMOOTHING, smoothing);
 		conf.set(TOPK, topk);
 
 		Job job = new Job(conf, LMRetrieval.class.getSimpleName()
