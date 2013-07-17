@@ -143,7 +143,7 @@ public class MergeTermStatistics extends Configured implements Tool {
     Job job = new Job(getConf(), MergeTermStatistics.class.getSimpleName() + ":" + input);
     job.setJarByClass(MergeTermStatistics.class);
 
-    job.setNumReduceTasks(100);
+    job.setNumReduceTasks(1);
 
     if (cmdline.hasOption(DF_MIN_OPTION)) {
       int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));

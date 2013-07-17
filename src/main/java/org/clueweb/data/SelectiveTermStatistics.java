@@ -28,7 +28,7 @@ import org.clueweb.clueweb12.app.BuildDictionary;
 
 import com.google.common.base.Preconditions;
 
-public class TermStatistics {
+public class SelectiveTermStatistics {
   private final int numTerms;
   private final long[] cfs;
   private final int[] dfs;
@@ -52,7 +52,7 @@ public class TermStatistics {
    * NOTE: does not work as I expected, unable to read standard merged collection statistics
    */
   
-  public TermStatistics(Path file) throws IOException {
+  public SelectiveTermStatistics(Path file) throws IOException {
     this(file, FileSystem.get(new Configuration()));
   }
   
@@ -64,7 +64,7 @@ public class TermStatistics {
    * @param fs FileSystem to read from
    * @throws IOException
    */
-  public TermStatistics(Path file, FileSystem fs) throws IOException {
+  public SelectiveTermStatistics(Path file, FileSystem fs) throws IOException {
     Preconditions.checkNotNull(file);
     Preconditions.checkNotNull(fs);
 

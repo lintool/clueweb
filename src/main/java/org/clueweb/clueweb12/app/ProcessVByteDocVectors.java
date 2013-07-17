@@ -53,6 +53,7 @@ public class ProcessVByteDocVectors extends Configured implements Tool {
   private static final Joiner JOINER = Joiner.on("|");
 
   private static class MyMapper extends Mapper<Text, BytesWritable, Text, Text> {
+	  
     private static final VByteDocVector DOC = new VByteDocVector();
 
     private DefaultFrequencySortedDictionary dictionary;

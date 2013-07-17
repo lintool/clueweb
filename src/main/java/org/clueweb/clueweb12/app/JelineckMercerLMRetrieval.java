@@ -25,6 +25,7 @@ package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
 
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -56,7 +57,6 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.data.VByteDocVector;
 
@@ -76,7 +76,7 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
     private static final VByteDocVector DOC = new VByteDocVector();
 
     private DefaultFrequencySortedDictionary dictionary;
-    private TermStatistics colstats;
+    //private TermStatistics colstats;
     private HashMap<Integer,Long> cfMap;
     private HashMap<Integer,Integer> dfMap;
     private double lambda;
@@ -140,7 +140,7 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
       fsin.close();
       br.close();
       
-      colstats = new TermStatistics(new Path(context.getConfiguration().get(COLLECTION_STATS)),cfMap,dfMap);     
+      //colstats = new TermStatistics(new Path(context.getConfiguration().get(COLLECTION_STATS)),cfMap,dfMap);     
 
       LOG.info("Number of queries read: " + termidQuerySet.size());
     }
@@ -171,7 +171,7 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
         }
         
         double mlProb = tf / (double) DOC.getLength();        
-        double colProb = df / (double) colstats.getCollectionSize();
+        double colProb = 1.0;//df / (double) colstats.getCollectionSize();
         double prob = Math.log(lambda * mlProb + (1.0 - lambda) * colProb);
 
         HashSet<Integer> queries = termidQuerySet.get(termid);
@@ -263,9 +263,9 @@ public class JelineckMercerLMRetrieval extends Configured implements Tool {
         .create(QUERIES_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("colstats")
         .create(COLLECTION_STATS));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("lambda")
+    options.addOption(OptionBuilder.withArgName("double").hasArg().withDescription("lambda")
         .create(LAMBDA));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("topk")
+    options.addOption(OptionBuilder.withArgName("int").hasArg().withDescription("topk")
         .create(TOPK));
 
     CommandLine cmdline;
