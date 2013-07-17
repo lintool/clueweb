@@ -47,11 +47,7 @@ public class TermStatistics {
    * @param file collection frequency data file
    * @throws IOException
    */
-  
-  /*
-   * NOTE: does not work as I expected, unable to read standard merged collection statistics
-   */
-  
+
   public TermStatistics(Path file) throws IOException {
     this(file, FileSystem.get(new Configuration()));
   }

@@ -155,7 +155,7 @@ public class MergeTermStatistics extends Configured implements Tool {
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.setInputFormatClass(SequenceFileInputFormat.class);
-    job.setOutputFormatClass(SequenceFileOutputFormat.class);
+//    job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
     job.setMapOutputValueClass(PairOfIntLong.class);
