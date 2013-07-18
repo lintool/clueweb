@@ -95,7 +95,7 @@ public class PForDocVectorTest {
 
   @Test
   public void testPFor4() throws Exception {
-    int len = 256;
+    int len = 128 * 4 + 1;
     FastPFOR p4 = new FastPFOR();
     int[] doc = new int[len];
     for (int i = 0; i<len; i++) {
@@ -106,11 +106,16 @@ public class PForDocVectorTest {
     IntWrapper outPos = new IntWrapper(0);
 
     int[] out = new int[len];
-    // There are exactly two blocks here, but we're tell it to compress only one block.
+    // There are multiple blocks here, but we're tell it to compress only one block.
     p4.compress(doc, inPos, 128, out, outPos);
 
     assertEquals(128, inPos.get());
-    // An indeed, the compression complies.
+    // And indeed, the compression complies.
+
+    // Now tell it to compress the rest.
+    p4.compress(doc, inPos, 128 * 3 + 1, out, outPos);
+    assertEquals(128 * 4, inPos.get());
+    // The rest of the blocks are compressed, but not the leftover integer.
   }
 
   @Test
