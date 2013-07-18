@@ -1,142 +1,46 @@
-ClueWeb Tools
-=============
+ClueWeb Tools (Fork) - Retrieval models
+=======================================
 
 This is a collection of tools for manipulating the [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
-Getting Stated
---------------
+The code is forked (and updated) based on [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb).
 
-You can clone the repo with the following command:
+Retrieval
+---------
+
+Implemented is currently only the basic language modeling approach to IR; smoothing types are linear interpolation or Dirichlet.
+
+To run the code first follow the installation guideline of the original [clueweb repository]((https://github.com/lintool/clueweb) and build the dictionary and document vectors as described.
+
+
+To conduct a retrieval run, call:
 
 ```
-$ git clone git://github.com/lintool/clueweb.git
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.LMRetrieval \
+	-dictionary /data/private/clueweb12/derived/dictionary.20130710 \
+	-smoothing 1000 \
+	-output /user/claudiah/retrieved \
+	-queries /user/claudiah/web.queries.trec2013 \
+	-vbdocvector /data/private/clueweb12/derived/docvectors.20130710/segm*/part* \
+	-topk 1000
 ``` 
 
-Once you've cloned the repository, build the package with Maven:
-
-```
-$ mvn clean package appassembler:assemble
-```
-
-Two notes:
-
-+ `appassembler:assemble` automatically generates a few launch scripts for you.
-+ in addition to the normal jar (`clueweb-tools-0.X-SNAPSHOT.jar`), this package uses the [Maven Shade plugin](http://maven.apache.org/plugins/maven-shade-plugin/) to create a "fat jar" (`clueweb-tools-0.X-SNAPSHOT-fatjar.jar`) that includes all dependencies except for Hadoop, so that the jar can be directly submitted via `hadoop jar ...`.
-
-To automatically generate project files for Eclipse:
-
-```
-$ mvn eclipse:clean
-$ mvn eclipse:eclipse
-```
-
-You can then use Eclipse's Import "Existing Projects into Workspace" functionality to import the project.
-
-Counting Records
-----------------
-
-For sanity checking and as a "template" for other Hadoop jobs, the package provides a simple program to count WARC records in ClueWeb12:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.CountClueWarcRecords -input /path/to/warc/files/
-```
-
-Examples of `/path/to/warc/files/` are:
-
-+ `/data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz`: for a single ClueWeb12 segment
-+ `/data/private/clueweb12/Disk1/ClueWeb12_*/*/*.warc.gz`: for an entire ClueWeb12 disk
-+ `/data/private/clueweb12/Disk[1234]/ClueWeb12_*/*/*.warc.gz`: for all of ClueWeb12
-
-Building a Dictionary
----------------------
-
-The next step is to build a dictionary that provides three capabilities:
-
-+ a bidirectional mapping from terms (strings) to termids (integers)
-+ lookup of document frequency (*df*) by term or termid
-+ lookup of collection frequency (*cf*) by term or termid
-
-To build the dictionary, we must first compute the term statistics:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.ComputeTermStatistics \
- -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
- -output term-stats/segment00
-```
-
-By default, the program throws away all terms with *df* less than 100, but this parameter can be set on the command line. The above command compute term statistics for a segment of ClueWeb12. It's easier to compute term statistics segment by segment to generate smaller and more manageable Hadoop jobs.
-
-Compute term statistics for all the other segments in the same manner.
-
-Next, merge all the segment statistics together:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.MergeTermStatistics \
- -input term-stats/segment* -output term-stats-all
-```
-
-Finally, build the dictionary:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.BuildDictionary \
- -input term-stats-all -output dictionary -count 7160086
-```
-
-You need to provide the number of terms in the dictionary via the `-count` option. That value is simply the number of output reducers from `MergeTermStatistics`.
-
-To explore the contents of the dictionary, use this little interactive program:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.dictionary.DefaultFrequencySortedDictionary dictionary
-```
-
-On ClueWeb12, following the above instructions will create a dictionary with 7,160,086 terms.
+The parameters are as follows
++ `dictionary`: HDFS path to the dictionary created by the clueweb tools
++ `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
++ `output`: folder in which the TREC results are collected (in TREC format); to merge everything into one file in the end call `hadoop fs -getmerge /path/to/output filename`; the resulting file should run smoothly through `trec_eval`
++ `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
++ `vbdocvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
++ `topk`: number of results that should be returned per query (default is 1000)
 
 
-**Implementation details:** Tokenization is performed by first using Jsoup throw away all markup information and then passing the resulting text through Lucene's `StandardAnalyzer`.
+Retrieval runs
+--------------
+The folder `runs` contains the two baselines when running the above command with `smoothing 0.5` and `smoothing 1000` respectively.
 
-The dictionary has two components: the terms are stored as a front-coded list (which necessarily means that the terms must be sorted); a monotone minimal perfect hash function is used to hash terms (strings) into the lexicographic position. Term to termid lookup is accomplished by the hashing function (to avoid binary searching through the front-coded data structure, which is expensive). Termid to term lookup is accomplished by direct accesses into the front-coded list. An additional mapping table is used to convert the lexicographic position into the (*df*-sorted) termid. 
 
-Building Document Vectors
--------------------------
+Sanity check
+------------
+To have confidence in the implementation, these baseline runs where compared with the [official organizer baselines](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines/2013/ql) (an Indri run) provided by the TREC's Web track organizers.
 
-With the dictionary, we can now convert the entire collection into a sequence of document vectors, where each document vector is represented by a sequence of termids; the termids map to the sequence of terms that comprise the document. These document vectors are much more compact and much faster to scan for processing purposes.
-
-The document vector is represented by the interface `org.clueweb.data.DocVector`. Currently, there are two concrete implementations:
-
-+ `VByteDocVector`, which uses Hadoop's built-in utilities for writing variable-length integers (what Hadoop calls VInt).
-+ `PForDocVector`, which uses PFor compression from Daniel Lemire's [JavaFastPFOR](https://github.com/lemire/JavaFastPFOR/) package.
-
-To build document vectors, use either `BuildVByteDocVectors` or `BuildPForDocVectors`:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.Build{VByte,PFor}DocVectors \
- -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
- -output /data/private/clueweb12/derived/docvectors/segment00 \
- -dictionary /data/private/clueweb12/derived/dictionary \
- -reducers 100
-```
-
-Once again, it's advisable to run on a segment at a time in order to keep the Hadoop job sizes manageable. Note that the program run identity reducers to repartition the document vectors into 100 parts (to avoid the small files problem).
-
-The output directory will contain `SequenceFile`s, with a `Text` containing the WARC-TREC-ID as the key. For VByte, the value will be a `BytesWritable` object; for PFor, the value will be an `IntArrayWritable` object.
-
-To process these document vectors, either use `ProcessVByteDocVectors` or `ProcessPForDocVectors` in the `org.clueweb.clueweb12.app` package, which provides sample code for consuming these document vectors and converting the termids back into terms.
-
-Size comparisons, on the entire ClueWeb12 collection:
-
-+ 5.54 TB: original compressed WARC files
-+ 1.08 TB: repackaged as `VByteDocVector`s
-+ 0.86 TB: repackaged as `PForDocVector`s
-+ ~1.6 TB: uncompressed termids (collection size is around ~400 billion terms)
-
-License
--------
-
-Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
