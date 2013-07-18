@@ -1,7 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -17,30 +15,29 @@
  * 
  * @author: Claudia
  * 
- * Implementation of language modeling. Retrieval parameter determines the type: <1 means Jelineck-Mercer and >1 means Dirichlet.
+ * Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type: 
+ * 		smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.
  * 
  * Approach:
  * 
  * (1) read the queries and convert into termids (based on the dictionary)
- * (2) read the term statistics file (only keep sumCF and the cf values of all termids found in (1))
- * (3) MyMapper: walk over all document vectors and as soon as a termid is found which occurs in a query,
- * 		output: (qid,(docid,score))
- * (4) MyReducer: all scores for one query appear at one reduce() step; sum up the scores for each docid and write out the topk docids
+ * (2) MyMapper: walk over all document vectors and as soon as a termid is found which occurs in a query,
+ * 		output: key:qid,value:(docid,score)
+ * (3) MyReducer: all scores for one query appear at a single reduce() step; sum up the scores for each docid and write out the topk docids
  * 		with the highest scores - a priority queue ensures that only the topk remain, but within this interval they remain unsorted
  * 
- * TODO: combiner!
- * TODO: Dirichlet!
  */
 
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.PriorityQueue;
 
 import org.apache.commons.cli.CommandLine;
@@ -61,6 +58,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Reducer.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
@@ -68,16 +66,17 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.data.TermStatistics;
 import org.clueweb.data.VByteDocVector;
 
+import tl.lin.data.pair.PairOfIntLong;
 import tl.lin.data.pair.PairOfStringFloat;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class LMRetrieval extends Configured implements Tool {
-	private static final Logger LOG = Logger
-			.getLogger(LMRetrieval.class);
+	private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
 
 	/*
 	 * Mapper outKey: query id (integer) Mapper outValue: two part element:
@@ -89,37 +88,34 @@ public class LMRetrieval extends Configured implements Tool {
 		private static final VByteDocVector DOC = new VByteDocVector();
 
 		private DefaultFrequencySortedDictionary dictionary;
-	
-		private HashMap<Integer, Long> cfMap;
-		private HashMap<String,Integer> termToTermidMap;
-		private long cfSum;
+		private TermStatistics stats;
+
 		private double smoothing;
 
 		// key: termid, hashset value: qids where the termid occurs in
 		private HashMap<Integer, HashSet<Integer>> termidQuerySet;
 
-		private static final IntWritable keyOut = new IntWritable();
-		private static final PairOfStringFloat valueOut = new PairOfStringFloat();
+		private static final IntWritable keyOut = new IntWritable();// qid
+		private static final PairOfStringFloat valueOut = new PairOfStringFloat();// (docid,score)
 
 		@Override
 		public void setup(Context context) throws IOException {
 			FileSystem fs = FileSystem.get(context.getConfiguration());
 			String path = context.getConfiguration().get(DICTIONARY_OPTION);
 			dictionary = new DefaultFrequencySortedDictionary(path, fs);
-
-			cfMap = Maps.newHashMap();
-			termToTermidMap = Maps.newHashMap();
-			cfSum = 0l;
+			path = context.getConfiguration().get(COLLECTION_STATS);
+			stats = new TermStatistics(new Path(path), fs);
 
 			try {
 				smoothing = Double.parseDouble(context.getConfiguration().get(
 						SMOOTHING));
 			} catch (NumberFormatException e) {
-				LOG.error("Lambda is expected to parse into a double, found: "
+				LOG.info("Smoothing is expected to parse into a double, found: "
 						+ context.getConfiguration().get(SMOOTHING));
-				LOG.info("Lambda set to 0.5 due to an error in parsing!");
-				smoothing = 0.5;
+				LOG.info("Smoothing set to 1000 (thus Dirichlet smoothing) due to an error in parsing!");
+				smoothing = 1000;
 			}
+
 			// read the queries from file
 			termidQuerySet = Maps.newHashMap();
 			FSDataInputStream fsin = fs.open(new Path(context
@@ -129,7 +125,7 @@ public class LMRetrieval extends Configured implements Tool {
 			while ((line = br.readLine()) != null) {
 				int index = line.indexOf(':');
 				if (index < 0) {
-					LOG.error("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
+					LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
 							+ line);
 					continue;
 				}
@@ -138,8 +134,6 @@ public class LMRetrieval extends Configured implements Tool {
 
 				for (String term : terms) {
 					int termid = dictionary.getId(term);
-					cfMap.put(termid, -1l);
-					termToTermidMap.put(term,termid);
 					if (termid < 0) {
 						LOG.info("Query " + qid + ": term [" + term
 								+ "] not found in the provided dictionary!");
@@ -157,31 +151,12 @@ public class LMRetrieval extends Configured implements Tool {
 			}
 			fsin.close();
 			br.close();
-
-			/*
-			 * last step in the process: find the necessary collection stats
-			 */
-			fsin = fs.open(new Path(context.getConfiguration().get(COLLECTION_STATS)));
-			br = new BufferedReader(new InputStreamReader(fsin));
-			while ((line = br.readLine()) != null) 
-			{
-				String term = line.substring(0,line.indexOf('\t'));				
-				long cf = Long.parseLong(line.substring(line.lastIndexOf(',')+2,line.lastIndexOf(')')));//+2 for , and whitespace
-				cfSum += cf;
-				if(!termToTermidMap.containsKey(term))
-					continue;
-				cfMap.put(termToTermidMap.get(term), cf);
-			}
-			fsin.close();
-			br.close();
-			
-
-			LOG.info("Number of queries read: " + termidQuerySet.size());
 		}
 
 		@Override
 		public void map(Text key, BytesWritable bytes, Context context)
 				throws IOException, InterruptedException {
+
 			VByteDocVector.fromBytesWritable(bytes, DOC);
 
 			// tfMap of the document
@@ -190,39 +165,73 @@ public class LMRetrieval extends Configured implements Tool {
 				int tf = 1;
 				if (tfMap.containsKey(termid))
 					tf += tfMap.get(termid);
-				tfMap.put(termid,tf);
+				tfMap.put(termid, tf);
 			}
 
+			// walk over all found document terms and check if one of them is a
+			// query term
 			for (int termid : tfMap.keySet()) {
+
+				// if not, go on
 				if (!termidQuerySet.containsKey(termid))
 					continue;
-				double tf = tfMap.get(termid);
 
-				double cf = cfMap.get(termid);
-				if (cf < 0) {
-					LOG.error("cfMap contains termid with a value of -1");
-					cf = 1;
-				}
+				double tf = tfMap.get(termid);
+				double df = stats.getDf(termid);
 
 				double mlProb = tf / (double) DOC.getLength();
-				double colProb = (double)cf/(double)cfSum;
-				
+				double colProb = df / (double) stats.getCollectionSize();
+
 				double prob = 0.0;
-				
-				//JM smoothing
-				if(smoothing<=1.0)
-					prob = smoothing * mlProb + (1.0 - smoothing)* colProb;
-				//Dirichlet smoothing
+
+				// JM smoothing
+				if (smoothing <= 1.0)
+					prob = smoothing * mlProb + (1.0 - smoothing) * colProb;
+				// Dirichlet smoothing
 				else
-					prob = (double)(tf + smoothing * colProb)/(double)( DOC.getLength() + smoothing );
-				
+					prob = (double) (tf + smoothing * colProb)
+							/ (double) (DOC.getLength() + smoothing);
+
 				prob = Math.log(prob);
 
 				HashSet<Integer> queries = termidQuerySet.get(termid);
 				for (Integer query : queries) {
 					keyOut.set(query);
-					valueOut.set(key.toString(), (float) prob);
+					valueOut.set(key.toString(), (float) prob);// remember: key
+																// is docid
 					context.write(keyOut, valueOut);
+				}
+			}
+		}
+	}
+
+	// key: qid, value: (docid,score)
+	private static class MyCombiner
+			extends
+			Reducer<IntWritable, PairOfStringFloat, IntWritable, PairOfStringFloat> {
+		private static final PairOfStringFloat output = new PairOfStringFloat();
+
+		@Override
+		public void reduce(IntWritable key, Iterable<PairOfStringFloat> values,
+				Context context) throws IOException, InterruptedException {
+
+			HashMap<String, Float> docProbs = Maps.newHashMap();
+			for (PairOfStringFloat v : values) 
+			{
+				String docid = v.getLeftElement();
+				float logProb = v.getRightElement();
+				if (docProbs.containsKey(docid))
+					logProb += docProbs.get(docid);
+				docProbs.put(docid, logProb);
+			
+				if(docProbs.size()>100000)
+				{
+					for(String d : docProbs.keySet())
+					{
+						output.set(d, docProbs.get(d));
+						context.write(key, output);
+					}
+					docProbs.clear();
 				}
 			}
 		}
@@ -238,7 +247,7 @@ public class LMRetrieval extends Configured implements Tool {
 			try {
 				topk = Integer.parseInt(context.getConfiguration().get(TOPK));
 			} catch (NumberFormatException e) {
-				LOG.error("topK should parse into an Integer, instead is "
+				LOG.info("topK should parse into an Integer, instead is "
 						+ context.getConfiguration().get(TOPK));
 				LOG.info("Setting topK to 10000");
 				topk = 10000;
@@ -264,7 +273,7 @@ public class LMRetrieval extends Configured implements Tool {
 			}
 
 			// keep the top-k
-			PriorityQueue<Double> pq = new PriorityQueue<Double>();
+/*			PriorityQueue<Double> pq = new PriorityQueue<Double>(topk+1);
 			for (Double d : docProbs.values()) {
 				pq.add(d);
 				if (pq.size() > topk)
@@ -273,11 +282,11 @@ public class LMRetrieval extends Configured implements Tool {
 
 			// what is left at the head of the queue?
 			double minVal = pq.remove();
-
+*/
 			// output everything that has a score of minVal or larger
 			for (String docid : docProbs.keySet()) {
-				if (docProbs.get(docid) < minVal)
-					continue;
+//				if (docProbs.get(docid) < minVal)
+//					continue;
 				valueOut.set(docid + "\t" + docProbs.get(docid));
 				context.write(key, valueOut);
 			}
@@ -295,7 +304,7 @@ public class LMRetrieval extends Configured implements Tool {
 	/**
 	 * Runs this tool.
 	 */
-	@SuppressWarnings("static-access")
+	@SuppressWarnings({ "static-access", "deprecation" })
 	public int run(String[] args) throws Exception {
 		Options options = new Options();
 
@@ -347,8 +356,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String smoothing = cmdline.getOptionValue(SMOOTHING);
 		String topk = cmdline.getOptionValue(TOPK);
 
-		LOG.info("Tool name: "
-				+ LMRetrieval.class.getSimpleName());
+		LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
 		LOG.info(" - vbdocvector: " + vbdocvector);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
@@ -363,9 +371,20 @@ public class LMRetrieval extends Configured implements Tool {
 		conf.set(COLLECTION_STATS, colstats);
 		conf.set(SMOOTHING, smoothing);
 		conf.set(TOPK, topk);
+		
+	    conf.set("mapreduce.map.memory.mb", "10048");
+	    conf.set("mapreduce.map.java.opts", "-Xmx10048m");
+	    conf.set("mapreduce.reduce.memory.mb", "10048");
+	    conf.set("mapreduce.reduce.java.opts", "-Xmx10048m");
+	    conf.set("mapred.task.timeout", "600000");
 
-		Job job = new Job(conf, LMRetrieval.class.getSimpleName()
-				+ ":" + vbdocvector);
+		FileSystem fs = FileSystem.get(conf);
+		if(fs.exists(new Path(output)))
+			fs.delete(new Path(output));
+
+	    
+		Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":"
+				+ vbdocvector);
 		job.setJarByClass(LMRetrieval.class);
 
 		FileInputFormat.setInputPaths(job, vbdocvector);
@@ -379,6 +398,7 @@ public class LMRetrieval extends Configured implements Tool {
 		job.setOutputValueClass(Text.class);
 
 		job.setMapperClass(MyMapper.class);
+//		job.setCombinerClass(MyCombiner.class);
 		job.setReducerClass(MyReducer.class);
 
 		long startTime = System.currentTimeMillis();
@@ -394,8 +414,7 @@ public class LMRetrieval extends Configured implements Tool {
 	 * <code>ToolRunner</code>.
 	 */
 	public static void main(String[] args) throws Exception {
-		LOG.info("Running "
-				+ LMRetrieval.class.getCanonicalName()
+		LOG.info("Running " + LMRetrieval.class.getCanonicalName()
 				+ " with args " + Arrays.toString(args));
 		ToolRunner.run(new LMRetrieval(), args);
 	}
