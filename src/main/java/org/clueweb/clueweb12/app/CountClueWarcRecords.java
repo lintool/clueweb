@@ -42,8 +42,8 @@ import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapred.ClueWeb12InputFormat;
 
 public class CountClueWarcRecords extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(CountClueWarcRecords.class);
@@ -51,11 +51,11 @@ public class CountClueWarcRecords extends Configured implements Tool {
   private static enum Records { TOTAL, PAGES };
 
   private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWarcRecord, NullWritable, NullWritable> {
+      Mapper<Writable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
     public void configure(JobConf job) {}
 
-    public void map(Writable key, ClueWarcRecord doc,
+    public void map(Writable key, ClueWeb12WarcRecord doc,
         OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
       reporter.incrCounter(Records.TOTAL, 1);
 
@@ -112,7 +112,7 @@ public class CountClueWarcRecords extends Configured implements Tool {
 
     FileInputFormat.addInputPaths(conf, input);
 
-    conf.setInputFormat(ClueWarcInputFormat.class);
+    conf.setInputFormat(ClueWeb12InputFormat.class);
     conf.setOutputFormat(NullOutputFormat.class);
     conf.setMapperClass(MyMapper.class);
 

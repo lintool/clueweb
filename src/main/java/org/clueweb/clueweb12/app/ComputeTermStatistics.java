@@ -44,8 +44,8 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;
@@ -67,12 +67,12 @@ public class ComputeTermStatistics extends Configured implements Tool {
   private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, PairOfIntLong> {
+  private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, PairOfIntLong> {
     private static final Text term = new Text();
     private static final PairOfIntLong pair = new PairOfIntLong();
 
     @Override
-    public void map(LongWritable key, ClueWarcRecord doc, Context context)
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
         throws IOException, InterruptedException {
       
       context.getCounter(Records.TOTAL).increment(1);
@@ -225,7 +225,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
     FileInputFormat.setInputPaths(job, input);
     FileOutputFormat.setOutputPath(job, new Path(output));
 
-    job.setInputFormatClass(ClueWarcInputFormat.class);
+    job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);

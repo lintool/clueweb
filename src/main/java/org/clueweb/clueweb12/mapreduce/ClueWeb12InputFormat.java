@@ -35,11 +35,11 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 
-public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcRecord> {
+public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb12WarcRecord> {
   @Override
-  public RecordReader<LongWritable, ClueWarcRecord> createRecordReader(InputSplit split,
+  public RecordReader<LongWritable, ClueWeb12WarcRecord> createRecordReader(InputSplit split,
       TaskAttemptContext context) throws IOException, InterruptedException {
     return new ClueWarcRecordReader();
   }
@@ -49,13 +49,13 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
     return false;
   }
   
-  public class ClueWarcRecordReader extends RecordReader<LongWritable, ClueWarcRecord> {
+  public class ClueWarcRecordReader extends RecordReader<LongWritable, ClueWeb12WarcRecord> {
     private CompressionCodecFactory compressionCodecs = null;
     private long start;
     private long pos;
     private long end;
     private LongWritable key = null;
-    private ClueWarcRecord value = null;
+    private ClueWeb12WarcRecord value = null;
     private Seekable filePosition;
     private CompressionCodec codec;
     private Decompressor decompressor;
@@ -106,7 +106,7 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
       }
       key.set(pos);
 
-      value = ClueWarcRecord.readNextWarcRecord(in);
+      value = ClueWeb12WarcRecord.readNextWarcRecord(in);
       if (value == null) {
         return false;
       }
@@ -119,7 +119,7 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
     }
 
     @Override
-    public ClueWarcRecord getCurrentValue() {
+    public ClueWeb12WarcRecord getCurrentValue() {
       return value;
     }
 

@@ -44,8 +44,8 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.VByteDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.jsoup.Jsoup;
@@ -61,7 +61,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, BytesWritable> {
+  private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, BytesWritable> {
     private static final Text DOCID = new Text();
     private static final BytesWritable DOC = new BytesWritable();
 
@@ -75,7 +75,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     }
 
     @Override
-    public void map(LongWritable key, ClueWarcRecord doc, Context context)
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
         throws IOException, InterruptedException {
       
       context.getCounter(Records.TOTAL).increment(1);
@@ -193,7 +193,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
 
-    job.setInputFormatClass(ClueWarcInputFormat.class);
+    job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
