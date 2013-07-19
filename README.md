@@ -47,7 +47,7 @@ Sanity check
 ------------
 To have confidence in the implementation, the baseline run is compared with the [official 2013 baselines](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines/2013/ql) (Indri runs) provided by the TREC's Web track organizers.
 
-Since no relevance judgments are available for ClueWeb12, we report the overlap in document ids among the top 10 / top 1000 ranked documents for each query between our baseline and the organizer ql baseline (results-catA.txt). The Perl scrip to compute the overlap is [available as well](https://github.com/chauff/clueweb/blob/master/scripts/computeOverlap.pl). 
+Since no relevance judgments are available for ClueWeb12, we report the overlap in document ids among the top 10 / top 1000 ranked documents for each query between our baseline and the organizer ql baseline [results-catA.txt](https://github.com/trec-web/trec-web-2013/blob/master/data/runs/baselines/2013/ql/results-cata.txt). The Perl scrip to compute the overlap is [available as well](https://github.com/chauff/clueweb/blob/master/scripts/computeOverlap.pl). 
 
 For about half of the queries, the overlap is 50% or more, indicating the code to be viable (differences can be explained through differences in HTML parsing, tokenization, stopwording, etc.)
 
