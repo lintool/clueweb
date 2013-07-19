@@ -50,9 +50,55 @@ To have confidence in the implementation, the baseline run was compared with the
 
 Since no relevance juddgments are available for ClueWeb12, we report the overlap in document ids among the top 10 / top 1000 ranked documents for each query between our baseline and the organizer ql baseline (results-catA.txt). For about half of the queries, the overlap is 50% or more, indicating the code to be viable (differences can be explained through differences in HTML parsing, tokenization, stopwording, etc.)
 
-| Query        | Top 10        | Top 1000  |
-| ------------- |:-------------:| ---------:|
-| col 3 is      | right-aligned | $1600 |
-| col 2 is      | centered      |   $12 |
-| zebra stripes | are neat      |    $1 |
-
+| Query        | Top 10 Overlap | Top 1000 Overlap  |
+| ------------ |:-------------:| ------------------:|
+ | 201 | 90% | 84%   |
+ | 202 | 60% | 88%   |
+ | 203 | 60% | 66%   |
+ | 204 | 20% | 70%   |
+ | 205 | 30% | 46%   |
+ | 206 | 70% | 85%   |
+ | 207 | 0% |  15%  |
+ | 208 | 60% | 89%   |
+ | 209 | 30% | 57%   |
+ | 210 | 50% | 81%   |
+ | 211 | 20% | 22%   |
+ | 212 | 30% | 46%   |
+ | 213 | 90% | 92%   |
+ | 214 | 60% | 67%   |
+ | 215 | 10% | 53%   |
+ | 216 | 20% | 50%   |
+ | 217 | 30% | 63%   |
+ | 218 | 50% | 59%   |
+ | 219 | 0% |  0%  |
+ | 220 | 10% | 24%   |
+ | 221 | 40% | 69%   |
+ | 222 | 90% | 73%   |
+ | 223 | 100% |81%    |
+ | 224 | 40% | 47%   |
+ | 225 | 80% | 88%   |
+ | 226 | 70% | 88%   |
+ | 227 | 0% |  3%  |
+ | 228 | 10% | 42%   |
+ | 229 | 60% | 80%   |
+ | 230 | 0% |  0%  |
+ | 231 | 0% |  28%  |
+ | 232 | 80% | 63%   |
+ | 233 | 70% | 86%   |
+ | 234 | 70% | 85%   |
+ | 235 | 60% | 76%   |
+ | 236 | 70% | 74%   |
+ | 237 | 90% | 52%   |
+ | 238 | 70% | 63%   |
+ | 239 | 70% | 92%   |
+ | 240 | 80% | 45%   |
+ | 241 | 0% |  2%  |
+ | 242 | 60% | 89%   |
+ | 243 | 40% | 82%   |
+ | 244 | 70% | 92%   |
+ | 245 | 50% | 78%   |
+ | 246 | 30% | 72%   |
+ | 247 | 80% | 56%   |
+ | 248 | 50% | 63%   |
+ | 249 | 0% |  2%  |
+ | 250 | 90% | 53%   |
