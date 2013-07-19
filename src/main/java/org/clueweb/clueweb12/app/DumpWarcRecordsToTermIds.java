@@ -50,8 +50,8 @@ import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
 
-public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToTermIds.class);
+public class DumpWarcRecordsToTermIds extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToTermIds.class);
 
   private static enum Records { TOTAL, PAGES, ERRORS, TOO_LONG };
 
@@ -171,10 +171,10 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 
-    Job job = new Job(getConf(), DumpClueWarcRecordsToTermIds.class.getSimpleName() + ":" + input);
-    job.setJarByClass(DumpClueWarcRecordsToTermIds.class);
+    Job job = new Job(getConf(), DumpWarcRecordsToTermIds.class.getSimpleName() + ":" + input);
+    job.setJarByClass(DumpWarcRecordsToTermIds.class);
 
-    LOG.info("Tool name: " + DumpClueWarcRecordsToTermIds.class.getSimpleName());
+    LOG.info("Tool name: " + DumpWarcRecordsToTermIds.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
@@ -215,8 +215,8 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DumpClueWarcRecordsToTermIds.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DumpWarcRecordsToTermIds.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DumpClueWarcRecordsToTermIds(), args);
+    ToolRunner.run(new DumpWarcRecordsToTermIds(), args);
   }
 }

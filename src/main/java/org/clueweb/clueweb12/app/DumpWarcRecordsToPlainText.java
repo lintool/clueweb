@@ -55,8 +55,8 @@ import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.base.Joiner;
 
-public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToPlainText.class);
+public class DumpWarcRecordsToPlainText extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToPlainText.class);
 
   private static enum Records { TOTAL, PAGES, ERRORS };
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
@@ -90,7 +90,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     }
   }
 
-  public DumpClueWarcRecordsToPlainText() {}
+  public DumpWarcRecordsToPlainText() {}
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
@@ -129,12 +129,12 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
 
-    LOG.info("Tool name: " + DumpClueWarcRecordsToPlainText.class.getSimpleName());
+    LOG.info("Tool name: " + DumpWarcRecordsToPlainText.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
 
-    JobConf conf = new JobConf(getConf(), DumpClueWarcRecordsToPlainText.class);
-    conf.setJobName(DumpClueWarcRecordsToPlainText.class.getSimpleName() + ":" + input);
+    JobConf conf = new JobConf(getConf(), DumpWarcRecordsToPlainText.class);
+    conf.setJobName(DumpWarcRecordsToPlainText.class.getSimpleName() + ":" + input);
 
     conf.setNumReduceTasks(0);
 
@@ -158,8 +158,8 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DumpClueWarcRecordsToPlainText.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DumpWarcRecordsToPlainText.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DumpClueWarcRecordsToPlainText(), args);
+    ToolRunner.run(new DumpWarcRecordsToPlainText(), args);
   }
 }
