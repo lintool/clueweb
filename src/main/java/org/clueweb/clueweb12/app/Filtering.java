@@ -17,31 +17,30 @@
  * 
  * @author: Claudia Hauff
  * 
- * Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type: 
- * 		smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.
+ * Implementation of near-duplicate filtering: given a TREC result file as input, each document in the ranking
+ * is compared with all documents ranked before it - if it has a cosine similarity > X to one of them, it is discarded as duplicate.
+ * Note: no fancy similarity based in hashes of hashes, just TF.IDF weighted cosine similarity
  * 
  * Approach:
  * 
- * (1) read the queries and convert into termids (based on the dictionary);
- * 			make sure to use the same Lucene Analyzer as in ComputeTermStatistics.java
+ * (1) read a TREC result file as input and keep track of (qid, rank, docid)
  * 
  * (2) MyMapper: walk over all document vectors
- * 			2.1 determine all queries which have at least one query term is occurring in the document
- * 			2.2 for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
+ * 			2.1 determine if the document occurs in the TREC result file
+ * 			2.2 if so, compute the weight vector and emit (qid,rank)(docid,[termid1 weight1 termid2 weight2 ...])
  * 
- * (3) MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
+ * (3) MyPartitioner: ensure that all keys (qid,rank) with the same qid end up in the same reducer; should be sorted by rank in the secondary sort
  * 
  * (4) MyReducer: for each query
- * 			4.1 create a priority queue (minimum heap): we only need to keep the topk highest probability scores
- * 			4.2 once all key/values for a query are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
- * 			4.3 output the results for a query in TREC result file format
+ * 			4.1 store the weight vector of docid at rank 1
+ * 			4.2 for each subsequent weight vector, compare to all previously kept weight vectors by computing cosine
+ * 			4.3 if similarity above threshold, discard document, otherwise emit it (in TREC result file format) and store it in memory for keep lookup
  * 
  */
 
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -64,6 +63,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.ArrayWritable;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.NullWritable;
@@ -86,20 +86,21 @@ import org.clueweb.data.VByteDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 
 import tl.lin.data.pair.PairOfIntString;
+import tl.lin.data.pair.PairOfInts;
 import tl.lin.data.pair.PairOfStringFloat;
 import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class LMRetrieval extends Configured implements Tool {
+public class Filtering extends Configured implements Tool {
 	
-	private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
+	private static final Logger LOG = Logger.getLogger(Filtering.class);
 	
 	
 	/*
 	 * Partitioner: all keys with the same qid go to the same reducer
-	 */
+	 
 	private static class MyPartitioner extends Partitioner<PairOfIntString, FloatWritable> {
 
 		@Override
@@ -108,48 +109,42 @@ public class LMRetrieval extends Configured implements Tool {
 			return arg0.getLeftElement()%numPartitions;
 		}
 	}
+	*/
 	
 	/*
-	 * comparator for the priority queue: elements (docid,score) are sorted by score
+	 * we need to emit [termid1 weight1 termid2 weight2 ...] as value in MyMapper
 	 */
-	private static class CustomComparator implements Comparator<PairOfStringFloat>
-	{
-		@Override
-		public int compare(PairOfStringFloat o1, PairOfStringFloat o2) {
-			
-			if(o1.getRightElement()==o2.getRightElement())
-				return 0;
-			if(o1.getRightElement()>o2.getRightElement())
-				return 1;
-			return -1;
+	private static class FloatArrayWritable extends ArrayWritable 
+	{ 
+		public FloatArrayWritable() 
+		{ 
+			super(FloatWritable.class); 
+		} 
+		
+		public FloatArrayWritable(FloatWritable[] values)
+		{
+			super(FloatWritable.class, values);
 		}
-	}
-	
+	} 
 
 	/*
-	 * Mapper outKey: (qid,docid), value: probability score
+	 * Mapper outKey: (qid,result file line), value: term weight array
 	 */
 	private static class MyMapper extends
-			Mapper<Text, BytesWritable, PairOfIntString, FloatWritable> {
+			Mapper<Text, BytesWritable, PairOfIntString, FloatArrayWritable> {
 		
 		private static final VByteDocVector DOC = new VByteDocVector();
 		private DefaultFrequencySortedDictionary dictionary;
 		private TermStatistics stats;
-		private double smoothingParam;
-		private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
 
-		/* for quick access store the queries in two hashmaps:
-		 * 		1. key: termid, value: list of queries in which the termid occurs
-		 * 		2. key: qid, value: list of termids that occur in the query
-		*/
-		private HashMap<Integer, HashSet<Integer>> termidQuerySet;
-		private HashMap<Integer, HashSet<Integer>> queryTermidSet;
-
-		//complex key: (qid,docid)
+		//complex key: (qid,result file line)
 		private static final PairOfIntString keyOut = new PairOfIntString();
-		//value: float; probability score log(P(q|d))
-		private static final FloatWritable valueOut = new FloatWritable();// score
+		private static final FloatArrayWritable valueOut = new FloatArrayWritable();
+		
+		//key: docid, value: a set of lines in the TREC result file containing that docid (he same docid can occur in several queries, thus Set as value)
+		private static final HashMap<String,HashSet<String>> docidResults = Maps.newHashMap();
 
+		private double numDocs;
 		
 		@Override
 		public void setup(Context context) throws IOException {
@@ -158,55 +153,25 @@ public class LMRetrieval extends Configured implements Tool {
 			String path = context.getConfiguration().get(DICTIONARY_OPTION);
 			dictionary = new DefaultFrequencySortedDictionary(path, fs);
 			stats = new TermStatistics(new Path(path), fs);
+			numDocs = stats.getCollectionSize();
 
-			try {
-				smoothingParam = Double.parseDouble(context.getConfiguration().get(
-						SMOOTHING));
-			} catch (NumberFormatException e) {
-				LOG.info("Smoothing is expected to parse into a double, found: "
-						+ context.getConfiguration().get(SMOOTHING));
-				LOG.info("Smoothing set to 1000 (thus Dirichlet smoothing) due to an error in parsing!");
-				smoothingParam = 1000;
-			}
-
-			// read the queries from file
-			termidQuerySet = Maps.newHashMap();
-			queryTermidSet = Maps.newHashMap();
 			FSDataInputStream fsin = fs.open(new Path(context
-					.getConfiguration().get(QUERIES_OPTION)));
+					.getConfiguration().get(TREC_RESULT_FILE)));
 			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
 			String line;
 			while ((line = br.readLine()) != null) {
-				int index = line.indexOf(':');
-				if (index < 0) {
-					LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
-							+ line);
-					continue;
-				}
-				int qid = Integer.parseInt(line.substring(0, index));
-				HashSet<Integer> termidSet = Sets.newHashSet();
 				
-				//normalize the terms (same way as the documents)
-		        for (String term : AnalyzerUtils.parse(ANALYZER, line.substring(index + 1))) {
-					int termid = dictionary.getId(term);
-					if (termid < 0) {
-						LOG.info("Query " + qid + ": term [" + term
-								+ "] not found in the provided dictionary!");
-						continue;
-					}
-					
-					termidSet.add(termid);
-
-					if (termidQuerySet.containsKey(termid))
-						termidQuerySet.get(termid).add(qid);
-					else {
-						HashSet<Integer> qids = Sets.newHashSet();
-						qids.add(qid);
-						termidQuerySet.put(termid, qids);
-					}
+				String tokens[] = line.split("\\s+");
+				String did = tokens[2];
+				HashSet<String> set = null;
+				if(docidResults.containsKey(did))
+					set = docidResults.get(did);
+				else
+				{
+					set = Sets.newHashSet();
+					docidResults.put(did, set);
 				}
-				
-				queryTermidSet.put(qid, termidSet);
+				set.add(line);
 			}
 			fsin.close();
 			br.close();
@@ -218,8 +183,9 @@ public class LMRetrieval extends Configured implements Tool {
 
 			VByteDocVector.fromBytesWritable(bytes, DOC);
 			
-			//determine which queries we care about for this document
-			HashSet<Integer> queriesToDo = Sets.newHashSet();
+			//is the document of interest to us?
+			if(!docidResults.containsKey(key.toString()))
+				return;
 
 			//tfMap of the document
 			HashMap<Integer, Integer> tfMap = Maps.newHashMap();
@@ -228,42 +194,25 @@ public class LMRetrieval extends Configured implements Tool {
 				if (tfMap.containsKey(termid))
 					tf += tfMap.get(termid);
 				tfMap.put(termid, tf);
-				
-				if(termidQuerySet.containsKey(termid))
-					for(int qid : termidQuerySet.get(termid))
-						queriesToDo.add(qid);
 			}
 			
-			//for each of the interesting queries, compute log(P(q|d))
-			for(int qid : queriesToDo)
+			FloatWritable[] fw = new FloatWritable[DOC.getLength()*2];
+			
+			int index=0;
+			for(int termid: tfMap.keySet())
 			{
-				double score = 0.0;
+				double weight = (double)tfMap.get(termid) * Math.log(  numDocs / (double)(stats.getDf(termid)) );
+				fw[index++]=new FloatWritable(termid);
+				fw[index++]=new FloatWritable((float)weight);
+			}
+			
+			for(String line : docidResults.get(key.toString()))
+			{
+				String tokens[] = line.split("\\s+");
+				int qid = Integer.parseInt(tokens[0]);
 				
-				for(int termid : queryTermidSet.get(qid))
-				{
-					double tf = 0.0;
-					if(tfMap.containsKey(termid))
-						tf = tfMap.get(termid);
-					double df = stats.getDf(termid);
-					
-					double mlProb = tf / (double) DOC.getLength();
-					double colProb = df / (double) stats.getCollectionSize();			
-
-					double prob = 0.0;
-
-					// JM smoothing
-					if (smoothingParam <= 1.0)
-						prob = smoothingParam * mlProb + (1.0 - smoothingParam) * colProb;
-					// Dirichlet smoothing
-					else
-						prob = (double) (tf + smoothingParam * colProb)
-								/ (double) (DOC.getLength() + smoothingParam);
-
-					score += (float)Math.log(prob);
-				}
-
-				keyOut.set(qid, key.toString());
-				valueOut.set((float) score );
+				keyOut.set(qid, line);
+				valueOut.set(fw);
 				context.write(keyOut, valueOut);
 			}
 		}
@@ -271,31 +220,42 @@ public class LMRetrieval extends Configured implements Tool {
 
 
 	private static class MyReducer extends
-			Reducer<PairOfIntString, FloatWritable, NullWritable, Text> {
+			Reducer<PairOfIntString, FloatArrayWritable, NullWritable, Text> {
 
+		private float threshold;
 		private int topk;
-		//PairOfStringFloat is (docid,score)
-		private PriorityQueue<PairOfStringFloat> queue;
 		private int currentQuery;
 		private static final NullWritable nullKey = NullWritable.get();
 		private static final Text valueOut = new Text();
 
 		public void setup(Context context) throws IOException {
 			try {
+				threshold = Float.parseFloat(context.getConfiguration().get(SIM_THRESHOLD));
 				topk = Integer.parseInt(context.getConfiguration().get(TOPK));
 			} catch (NumberFormatException e) {
-				LOG.info("topK should parse into an Integer, instead is "
-						+ context.getConfiguration().get(TOPK));
-				topk = 1000;
-				LOG.info("Setting topK to "+topk);
+				LOG.info("sim threshold should parse into a float, instead is "
+						+ context.getConfiguration().get(SIM_THRESHOLD));
+				threshold = 0.9f;
+				LOG.info("Setting sim. threshold to "+threshold);
+			}
+			currentQuery = -1;
+			
+			//sanity check
+			if(threshold<0||threshold>1)
+			{
+				LOG.info("Error: threshold should always be between 0 and 1. Setting default to 0.9");
+				threshold = 0.9f;
 			}
 			
-			queue = new PriorityQueue<PairOfStringFloat>(topk+1,new CustomComparator());
-			currentQuery = -1;
+			if(topk<0)
+			{
+				LOG.info("Error: topk must be positive. Trying default setting of 1000");
+				topk=1000;
+			}
 		}
 
 		@Override
-		public void reduce(PairOfIntString key, Iterable<FloatWritable> values,
+		public void reduce(PairOfIntString key, Iterable<FloatArrayWritable> values,
 				Context context) throws IOException, InterruptedException {
 
 			//we hit a new query, process what is currently in the priority queue
@@ -322,20 +282,13 @@ public class LMRetrieval extends Configured implements Tool {
 				currentQuery = key.getLeftElement();
 			}
 			
-			//actually, it should only be a single element
-			float scoreSum = 0f;
-			for(FloatWritable v : values)
-				scoreSum += v.get();
+			int qid = key.getLeftElement();
+			String line = key.getRightElement();
 			
-			//if there are less than topk elements, add the new (docid,score) to the queue
-			if(queue.size()<topk)
-				queue.add(new PairOfStringFloat(key.getRightElement(),scoreSum));
-			//if we have topk elements in the queue, we need to check if the queue's current minimum is smaller than
-			//the incoming score; if yes, "exchnage" the (docid,score) elements
-			else if(queue.peek().getRightElement()<scoreSum)
+			//should be a single element
+			for(FloatArrayWritable faw : values)
 			{
-				queue.remove();
-				queue.add(new PairOfStringFloat(key.getRightElement(),scoreSum));
+				faw.
 			}
 		}
 		
@@ -418,7 +371,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String smoothing = cmdline.getOptionValue(SMOOTHING);
 		String topk = cmdline.getOptionValue(TOPK);
 
-		LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
+		LOG.info("Tool name: " + Filtering.class.getSimpleName());
 		LOG.info(" - vbdocvector: " + vbdocvector);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
@@ -442,9 +395,9 @@ public class LMRetrieval extends Configured implements Tool {
 		if (fs.exists(new Path(output)))
 			fs.delete(new Path(output));
 
-		Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":"
+		Job job = new Job(conf, Filtering.class.getSimpleName() + ":"
 				+ vbdocvector);
-		job.setJarByClass(LMRetrieval.class);
+		job.setJarByClass(Filtering.class);
 
 		FileInputFormat.setInputPaths(job, vbdocvector);
 		FileOutputFormat.setOutputPath(job, new Path(output));
@@ -472,8 +425,8 @@ public class LMRetrieval extends Configured implements Tool {
 	 * <code>ToolRunner</code>.
 	 */
 	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + LMRetrieval.class.getCanonicalName()
+		LOG.info("Running " + Filtering.class.getCanonicalName()
 				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new LMRetrieval(), args);
+		ToolRunner.run(new Filtering(), args);
 	}
 }
