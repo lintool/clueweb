@@ -31,7 +31,7 @@ $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 The parameters are:
 + `dictionary`: HDFS path to the dictionary created by the clueweb tools
 + `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
-+ `output`: folder in which the TREC results are collected (in TREC format); to merge everything into one file in the end call `hadoop fs -getmerge /path/to/output filename`; the resulting file should run smoothly through `trec_eval`
++ `output`: folder in which the TREC results are collected (in TREC result file format); to merge everything into one file in the end call `hadoop fs -getmerge /user/chauff/res.dir1000 res.dir1000`; the merged result file should run smoothly through `trec_eval`
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
 + `vbdocvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
 + `topk`: number of results that should be returned per query (default is 1000)
@@ -39,7 +39,7 @@ The parameters are:
 
 Retrieval runs
 --------------
-The folder `runs` contains the baseline run when running the above retrieval program (i.e. LM with Dirichlet smoothing and mu=1000).
+The file `runs/res.dir1000` contains the baseline result file when running the above retrieval program (i.e. LM with Dirichlet smoothing and mu=1000).
 On an empty sara cluster, this run on 50 queries takes about one hour.
 
 
