@@ -53,8 +53,8 @@ For about half of the queries, the overlap is 50% or more, indicating the code t
 
 | Query        | Top 10 Overlap | Top 1000 Overlap  |
 | ------------ |:-------------:| ------------------:|
- | 201 | 90% | 84%   |
- | 202 | 60% | 88%   |
+| 201 | 90% | 84%   |
+| 202 | 60% | 88%   |
  | 203 | 60% | 66%   |
  | 204 | 20% | 70%   |
  | 205 | 30% | 46%   |
