@@ -22,7 +22,7 @@ $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	org.clueweb.clueweb12.app.LMRetrieval \
 	-dictionary /data/private/clueweb12/derived/dictionary.20130710 \
 	-smoothing 1000 \
-	-output /user/chauff/retrieved \
+	-output /user/chauff/res.dir1000 \
 	-queries /user/chauff/web.queries.trec2013 \
 	-vbdocvector /data/private/clueweb12/derived/docvectors.20130710/segm*/part* \
 	-topk 1000
@@ -39,8 +39,7 @@ The parameters are:
 
 Retrieval runs
 --------------
-The folder `runs` contains the baseline run when running the above retrieval program.
-
+The folder `runs` contains the baseline run when running the above retrieval program (i.e. LM with Dirichlet smoothing and mu=1000).
 On an empty sara cluster, this run on 50 queries takes about one hour.
 
 
