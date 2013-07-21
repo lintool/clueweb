@@ -42,10 +42,9 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
+import org.clueweb.dictionary.PorterAnalyzer;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;
@@ -58,7 +57,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
   private static enum Records { TOTAL, PAGES, ERRORS, SKIPPED };
 
-  private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
+  //private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
+  private static final Analyzer ANALYZER = new PorterAnalyzer();
 
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
