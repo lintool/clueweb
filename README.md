@@ -1,55 +1,7 @@
 ClueWeb Tools (Fork) - Retrieval models
 =======================================
 
-Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
-
-<<<<<<< HEAD
 The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). The only change occured in the addition of a retrieval app
-=======
-Sign up to the mailing list at [the clueweb-list@cwi.nl mailman page](https://lists.cwi.nl/mailman/listinfo/clueweb-list).
-
-Getting Stated
---------------
-
-You can clone the repo with the following command:
-
-```
-$ git clone git://github.com/lintool/clueweb.git
-``` 
-
-Once you've cloned the repository, build the package with Maven:
-
-```
-$ mvn clean package appassembler:assemble
-```
-
-Two notes:
-
-+ `appassembler:assemble` automatically generates a few launch scripts for you.
-+ in addition to the normal jar (`clueweb-tools-0.X-SNAPSHOT.jar`), this package uses the [Maven Shade plugin](http://maven.apache.org/plugins/maven-shade-plugin/) to create a "fat jar" (`clueweb-tools-0.X-SNAPSHOT-fatjar.jar`) that includes all dependencies except for Hadoop, so that the jar can be directly submitted via `hadoop jar ...`.
-
-To automatically generate project files for Eclipse:
-
-```
-$ mvn eclipse:clean
-$ mvn eclipse:eclipse
-```
-
-You can then use Eclipse's Import "Existing Projects into Workspace" functionality to import the project.
-
-Counting Records
-----------------
-
-For sanity checking and as a "template" for other Hadoop jobs, the package provides a simple program to count WARC records in ClueWeb12:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.CountClueWarcRecords -input /path/to/warc/files/
-```
->>>>>>> clueweb/master
-
-+ org.clueweb.clueweb12.app.LMRetrieval
-
 
 Retrieval
 ---------
@@ -71,7 +23,6 @@ $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	-topk 1000
 ``` 
 
-<<<<<<< HEAD
 The parameters are:
 + `dictionary`: HDFS path to the dictionary created by the clueweb tools
 + `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
@@ -79,12 +30,6 @@ The parameters are:
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
 + `vbdocvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
 + `topk`: number of results that should be returned per query (default is 1000)
-=======
-+ 5.54 TB: original compressed WARC files
-+ 1.08 TB: repackaged as `VByteDocVector`s
-+ 0.86 TB: repackaged as `PForDocVector`s
-+ ~1.6 TB: uncompressed termids (collection size is ~400 billion terms)
->>>>>>> lintools-clueweb/working
 
 
 Retrieval runs
