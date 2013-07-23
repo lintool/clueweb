@@ -42,23 +42,23 @@ import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapred.ClueWeb12InputFormat;
 
-public class CountClueWarcRecords extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(CountClueWarcRecords.class);
+public class CountWarcRecordsOld extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(CountWarcRecordsOld.class);
 
   private static enum Records {
     TOTAL, PAGES
   };
 
   private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWarcRecord, NullWritable, NullWritable> {
+      Mapper<Writable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
     public void configure(JobConf job) {
     }
 
-    public void map(Writable key, ClueWarcRecord doc,
+    public void map(Writable key, ClueWeb12WarcRecord doc,
         OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
       reporter.incrCounter(Records.TOTAL, 1);
 
@@ -69,7 +69,7 @@ public class CountClueWarcRecords extends Configured implements Tool {
     }
   }
 
-  public CountClueWarcRecords() {
+  public CountWarcRecordsOld() {
   }
 
   public static final String INPUT_OPTION = "input";
@@ -105,17 +105,17 @@ public class CountClueWarcRecords extends Configured implements Tool {
 
     String input = cmdline.getOptionValue(INPUT_OPTION);
 
-    LOG.info("Tool name: " + CountClueWarcRecords.class.getSimpleName());
+    LOG.info("Tool name: " + CountWarcRecordsOld.class.getSimpleName());
     LOG.info(" - input: " + input);
 
-    JobConf conf = new JobConf(getConf(), CountClueWarcRecords.class);
-    conf.setJobName(CountClueWarcRecords.class.getSimpleName() + ":" + input);
+    JobConf conf = new JobConf(getConf(), CountWarcRecordsOld.class);
+    conf.setJobName(CountWarcRecordsOld.class.getSimpleName() + ":" + input);
 
     conf.setNumReduceTasks(0);
 
     FileInputFormat.addInputPaths(conf, input);
 
-    conf.setInputFormat(ClueWarcInputFormat.class);
+    conf.setInputFormat(ClueWeb12InputFormat.class);
     conf.setOutputFormat(NullOutputFormat.class);
     conf.setMapperClass(MyMapper.class);
 
@@ -132,8 +132,8 @@ public class CountClueWarcRecords extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + CountClueWarcRecords.class.getCanonicalName() + " with args "
+    LOG.info("Running " + CountWarcRecordsOld.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new CountClueWarcRecords(), args);
+    ToolRunner.run(new CountWarcRecordsOld(), args);
   }
 }

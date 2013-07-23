@@ -1,7 +1,7 @@
 ClueWeb Tools (Fork) - Retrieval models
 =======================================
 
-This is a collection of tools for manipulating the [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
+Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
 <<<<<<< HEAD
 The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). The only change occured in the addition of a retrieval app
@@ -71,6 +71,7 @@ $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	-topk 1000
 ``` 
 
+<<<<<<< HEAD
 The parameters are:
 + `dictionary`: HDFS path to the dictionary created by the clueweb tools
 + `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
@@ -78,6 +79,12 @@ The parameters are:
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
 + `vbdocvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
 + `topk`: number of results that should be returned per query (default is 1000)
+=======
++ 5.54 TB: original compressed WARC files
++ 1.08 TB: repackaged as `VByteDocVector`s
++ 0.86 TB: repackaged as `PForDocVector`s
++ ~1.6 TB: uncompressed termids (collection size is ~400 billion terms)
+>>>>>>> lintools-clueweb/working
 
 
 Retrieval runs

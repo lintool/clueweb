@@ -47,29 +47,29 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapred.ClueWeb12InputFormat;
 import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.base.Joiner;
 
-public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToPlainText.class);
+public class DumpWarcRecordsToPlainText extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToPlainText.class);
 
   private static enum Records { TOTAL, PAGES, ERRORS };
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
   private static final Joiner JOINER = Joiner.on("|");
 
   private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWarcRecord, Text, Text> {
+      Mapper<Writable, ClueWeb12WarcRecord, Text, Text> {
     private static final Text KEY = new Text();
     private static final Text VALUE = new Text();
 
     public void configure(JobConf job) {}
 
-    public void map(Writable key, ClueWarcRecord doc, OutputCollector<Text, Text> output,
+    public void map(Writable key, ClueWeb12WarcRecord doc, OutputCollector<Text, Text> output,
         Reporter reporter) throws IOException {
       reporter.incrCounter(Records.TOTAL, 1);
 
@@ -90,7 +90,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     }
   }
 
-  public DumpClueWarcRecordsToPlainText() {}
+  public DumpWarcRecordsToPlainText() {}
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
@@ -129,19 +129,19 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
 
-    LOG.info("Tool name: " + DumpClueWarcRecordsToPlainText.class.getSimpleName());
+    LOG.info("Tool name: " + DumpWarcRecordsToPlainText.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
 
-    JobConf conf = new JobConf(getConf(), DumpClueWarcRecordsToPlainText.class);
-    conf.setJobName(DumpClueWarcRecordsToPlainText.class.getSimpleName() + ":" + input);
+    JobConf conf = new JobConf(getConf(), DumpWarcRecordsToPlainText.class);
+    conf.setJobName(DumpWarcRecordsToPlainText.class.getSimpleName() + ":" + input);
 
     conf.setNumReduceTasks(0);
 
     FileInputFormat.addInputPaths(conf, input);
     FileOutputFormat.setOutputPath(conf, new Path(output));
 
-    conf.setInputFormat(ClueWarcInputFormat.class);
+    conf.setInputFormat(ClueWeb12InputFormat.class);
     conf.setOutputFormat(TextOutputFormat.class);
     conf.setMapperClass(MyMapper.class);
 
@@ -158,8 +158,8 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DumpClueWarcRecordsToPlainText.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DumpWarcRecordsToPlainText.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DumpClueWarcRecordsToPlainText(), args);
+    ToolRunner.run(new DumpWarcRecordsToPlainText(), args);
   }
 }

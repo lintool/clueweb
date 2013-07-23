@@ -43,15 +43,15 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.mapreduce.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
 
-public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToTermIds.class);
+public class DumpWarcRecordsToTermIds extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToTermIds.class);
 
   private static enum Records { TOTAL, PAGES, ERRORS, TOO_LONG };
 
@@ -59,7 +59,7 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
 
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWarcRecord, Text, Text> {
+  private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, Text> {
     private static final Text DOCID = new Text();
     private static final Text DOC = new Text();
     private static final Text EMPTY = new Text();
@@ -74,7 +74,7 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
     }
 
     @Override
-    public void map(LongWritable key, ClueWarcRecord doc, Context context)
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
         throws IOException, InterruptedException {
       
       context.getCounter(Records.TOTAL).increment(1);
@@ -171,10 +171,10 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 
-    Job job = new Job(getConf(), DumpClueWarcRecordsToTermIds.class.getSimpleName() + ":" + input);
-    job.setJarByClass(DumpClueWarcRecordsToTermIds.class);
+    Job job = new Job(getConf(), DumpWarcRecordsToTermIds.class.getSimpleName() + ":" + input);
+    job.setJarByClass(DumpWarcRecordsToTermIds.class);
 
-    LOG.info("Tool name: " + DumpClueWarcRecordsToTermIds.class.getSimpleName());
+    LOG.info("Tool name: " + DumpWarcRecordsToTermIds.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
@@ -192,7 +192,7 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
 
-    job.setInputFormatClass(ClueWarcInputFormat.class);
+    job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(TextOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
@@ -215,8 +215,8 @@ public class DumpClueWarcRecordsToTermIds extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DumpClueWarcRecordsToTermIds.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DumpWarcRecordsToTermIds.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DumpClueWarcRecordsToTermIds(), args);
+    ToolRunner.run(new DumpWarcRecordsToTermIds(), args);
   }
 }
