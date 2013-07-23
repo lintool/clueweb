@@ -40,8 +40,10 @@ package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
 
+import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -62,6 +64,7 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
@@ -78,6 +81,7 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.util.Version;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
@@ -137,9 +141,8 @@ public class LMRetrieval extends Configured implements Tool {
 		private DefaultFrequencySortedDictionary dictionary;
 		private TermStatistics stats;
 		private double smoothingParam;
-		// private static final Analyzer ANALYZER = new
-		// StandardAnalyzer(Version.LUCENE_43);
-		private static final Analyzer ANALYZER = new PorterAnalyzer();
+		
+		private static Analyzer ANALYZER;
 
 		/*
 		 * for quick access store the queries in two hashmaps: 1. key: termid,
@@ -164,6 +167,18 @@ public class LMRetrieval extends Configured implements Tool {
 
 			smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
 			LOG.info("Smoothing set to "+smoothingParam);
+			
+			String analyzerType = context.getConfiguration().get(PREPROCESSING);
+			if(analyzerType.equals("standard")) {
+				ANALYZER = new org.apache.lucene.analysis.standard.StandardAnalyzer(Version.LUCENE_43);
+			}
+			else if(analyzerType.equals("porter")) {
+				ANALYZER = new PorterAnalyzer();
+			}
+			else {
+				LOG.error("Error: proprocessing type not recognized. Abort "+this.getClass().getName());
+				System.exit(1);
+			}
 
 			// read the queries from file
 			termidQuerySet = Maps.newHashMap();
@@ -181,16 +196,17 @@ public class LMRetrieval extends Configured implements Tool {
 				}
 				int qid = Integer.parseInt(line.substring(0, index));
 				HashSet<Integer> termidSet = Sets.newHashSet();
+				
+				LOG.info("Parsing query line "+line);
 
 				// normalize the terms (same way as the documents)
 				for (String term : AnalyzerUtils.parse(ANALYZER,
 						line.substring(index + 1))) {
 
 					int termid = dictionary.getId(term);
+					LOG.info("parsed term ["+term+"] has termid "+termid);
 
 					if (termid < 0) {
-						LOG.info("Query " + qid + ": term [" + term
-								+ "] not found in the provided dictionary!");
 						continue;
 					}
 
@@ -357,6 +373,7 @@ public class LMRetrieval extends Configured implements Tool {
 	public static final String QUERIES_OPTION = "queries";
 	public static final String SMOOTHING = "smoothing";
 	public static final String TOPK = "topk";
+	public static final String PREPROCESSING = "preprocessing";
 
 	/**
 	 * Runs this tool.
@@ -381,6 +398,9 @@ public class LMRetrieval extends Configured implements Tool {
 				.withDescription("smoothing").create(SMOOTHING));
 		options.addOption(OptionBuilder.withArgName("int").hasArg()
 				.withDescription("topk").create(TOPK));
+		options.addOption(OptionBuilder.withArgName("string (porter|standard)").hasArg()
+				.withDescription("preprocessing").create(PREPROCESSING));
+
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();
@@ -399,7 +419,9 @@ public class LMRetrieval extends Configured implements Tool {
 				|| !cmdline.hasOption(OUTPUT_OPTION)
 				|| !cmdline.hasOption(DICTIONARY_OPTION)
 				|| !cmdline.hasOption(QUERIES_OPTION)
-				|| !cmdline.hasOption(SMOOTHING) || !cmdline.hasOption(TOPK)) {
+				|| !cmdline.hasOption(SMOOTHING) 
+				|| !cmdline.hasOption(TOPK)
+				|| !cmdline.hasOption(PREPROCESSING)) {
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp(this.getClass().getName(), options);
 			ToolRunner.printGenericCommandUsage(System.out);
@@ -412,6 +434,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String queries = cmdline.getOptionValue(QUERIES_OPTION);
 		String smoothing = cmdline.getOptionValue(SMOOTHING);
 		String topk = cmdline.getOptionValue(TOPK);
+		String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
 		LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
 		LOG.info(" - docvector: " + docvector);
@@ -420,12 +443,14 @@ public class LMRetrieval extends Configured implements Tool {
 		LOG.info(" - queries: " + queries);
 		LOG.info(" - smoothing: " + smoothing);
 		LOG.info(" - topk: " + topk);
+		LOG.info(" - preprocessing: "+preprocessing);
 
 		Configuration conf = getConf();
 		conf.set(DICTIONARY_OPTION, dictionary);
 		conf.set(QUERIES_OPTION, queries);
 		conf.setFloat(SMOOTHING, Float.parseFloat(smoothing));
 		conf.setInt(TOPK, Integer.parseInt(topk));
+		conf.set(PREPROCESSING,preprocessing);
 
 		conf.set("mapreduce.map.memory.mb", "10048");
 		conf.set("mapreduce.map.java.opts", "-Xmx10048m");
