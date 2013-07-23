@@ -37,113 +37,119 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.FileSplit;
 import org.clueweb.clueweb09.ClueWeb09WarcRecord;
 
-public class ClueWeb09InputFormat extends FileInputFormat<LongWritable, ClueWeb09WarcRecord> {
-  @Override
-  public RecordReader<LongWritable, ClueWeb09WarcRecord> createRecordReader(InputSplit split,
-      TaskAttemptContext context) throws IOException, InterruptedException {
-    return new ClueWarcRecordReader();
-  }
+public class ClueWeb09InputFormat extends
+		FileInputFormat<LongWritable, ClueWeb09WarcRecord> {
+	@Override
+	public RecordReader<LongWritable, ClueWeb09WarcRecord> createRecordReader(
+			InputSplit split, TaskAttemptContext context) throws IOException,
+			InterruptedException {
+		return new ClueWarcRecordReader();
+	}
 
-  @Override
-  protected boolean isSplitable(JobContext context, Path filename) {
-    return false;
-  }
-  
-  public class ClueWarcRecordReader extends RecordReader<LongWritable, ClueWeb09WarcRecord> {
-    private CompressionCodecFactory compressionCodecs = null;
-    private long start;
-    private long pos;
-    private long end;
-    private LongWritable key = null;
-    private ClueWeb09WarcRecord value = null;
-    private Seekable filePosition;
-    private CompressionCodec codec;
-    private Decompressor decompressor;
-    private DataInputStream in;
+	@Override
+	protected boolean isSplitable(JobContext context, Path filename) {
+		return false;
+	}
 
-    public void initialize(InputSplit genericSplit, TaskAttemptContext context) throws IOException {
-      FileSplit split = (FileSplit) genericSplit;
-      Configuration job = context.getConfiguration();
-      start = split.getStart();
-      end = start + split.getLength();
-      final Path file = split.getPath();
-      compressionCodecs = new CompressionCodecFactory(job);
-      codec = compressionCodecs.getCodec(file);
+	public class ClueWarcRecordReader extends
+			RecordReader<LongWritable, ClueWeb09WarcRecord> {
+		private CompressionCodecFactory compressionCodecs = null;
+		private long start;
+		private long pos;
+		private long end;
+		private LongWritable key = null;
+		private ClueWeb09WarcRecord value = null;
+		private Seekable filePosition;
+		private CompressionCodec codec;
+		private Decompressor decompressor;
+		private DataInputStream in;
 
-      // open the file and seek to the start of the split
-      FileSystem fs = file.getFileSystem(job);
-      FSDataInputStream fileIn = fs.open(split.getPath());
+		public void initialize(InputSplit genericSplit,
+				TaskAttemptContext context) throws IOException {
+			FileSplit split = (FileSplit) genericSplit;
+			Configuration job = context.getConfiguration();
+			start = split.getStart();
+			end = start + split.getLength();
+			final Path file = split.getPath();
+			compressionCodecs = new CompressionCodecFactory(job);
+			codec = compressionCodecs.getCodec(file);
 
-      if (isCompressedInput()) {
-        in = new DataInputStream(codec.createInputStream(fileIn, decompressor));
-        filePosition = fileIn;
-      } else {
-        fileIn.seek(start);
-        in = fileIn;
-        filePosition = fileIn;
-      }
+			// open the file and seek to the start of the split
+			FileSystem fs = file.getFileSystem(job);
+			FSDataInputStream fileIn = fs.open(split.getPath());
 
-      this.pos = start;
-    }
+			if (isCompressedInput()) {
+				in = new DataInputStream(codec.createInputStream(fileIn,
+						decompressor));
+				filePosition = fileIn;
+			} else {
+				fileIn.seek(start);
+				in = fileIn;
+				filePosition = fileIn;
+			}
 
-    private boolean isCompressedInput() {
-      return (codec != null);
-    }
+			this.pos = start;
+		}
 
-    private long getFilePosition() throws IOException {
-      long retVal;
-      if (isCompressedInput() && null != filePosition) {
-        retVal = filePosition.getPos();
-      } else {
-        retVal = pos;
-      }
-      return retVal;
-    }
+		private boolean isCompressedInput() {
+			return (codec != null);
+		}
 
-    public boolean nextKeyValue() throws IOException {
-      if (key == null) {
-        key = new LongWritable();
-      }
-      key.set(pos);
+		private long getFilePosition() throws IOException {
+			long retVal;
+			if (isCompressedInput() && null != filePosition) {
+				retVal = filePosition.getPos();
+			} else {
+				retVal = pos;
+			}
+			return retVal;
+		}
 
-      value = ClueWeb09WarcRecord.readNextWarcRecord(in);
-      if (value == null) {
-        return false;
-      }
-      return true;
-    }
+		public boolean nextKeyValue() throws IOException {
+			if (key == null) {
+				key = new LongWritable();
+			}
+			key.set(pos);
 
-    @Override
-    public LongWritable getCurrentKey() {
-      return key;
-    }
+			value = ClueWeb09WarcRecord.readNextWarcRecord(in);
+			if (value == null) {
+				return false;
+			}
+			return true;
+		}
 
-    @Override
-    public ClueWeb09WarcRecord getCurrentValue() {
-      return value;
-    }
+		@Override
+		public LongWritable getCurrentKey() {
+			return key;
+		}
 
-    /**
-     * Get the progress within the split
-     */
-    public float getProgress() throws IOException {
-      if (start == end) {
-        return 0.0f;
-      } else {
-        return Math.min(1.0f, (getFilePosition() - start) / (float) (end - start));
-      }
-    }
+		@Override
+		public ClueWeb09WarcRecord getCurrentValue() {
+			return value;
+		}
 
-    public synchronized void close() throws IOException {
-      try {
-        if (in != null) {
-          in.close();
-        }
-      } finally {
-        if (decompressor != null) {
-          CodecPool.returnDecompressor(decompressor);
-        }
-      }
-    }
-  }
+		/**
+		 * Get the progress within the split
+		 */
+		public float getProgress() throws IOException {
+			if (start == end) {
+				return 0.0f;
+			} else {
+				return Math.min(1.0f, (getFilePosition() - start)
+						/ (float) (end - start));
+			}
+		}
+
+		public synchronized void close() throws IOException {
+			try {
+				if (in != null) {
+					in.close();
+				}
+			} finally {
+				if (decompressor != null) {
+					CodecPool.returnDecompressor(decompressor);
+				}
+			}
+		}
+	}
 }

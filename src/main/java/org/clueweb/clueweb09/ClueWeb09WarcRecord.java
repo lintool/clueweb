@@ -86,7 +86,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 	 * @return the read line (or null if eof)
 	 * @throws java.io.IOException
 	 */
-	private static String readLineFromInputStream(DataInputStream in) throws IOException {
+	private static String readLineFromInputStream(DataInputStream in)
+			throws IOException {
 		StringBuilder retString = new StringBuilder();
 
 		boolean keepReading = true;
@@ -170,8 +171,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 	 * @return the content byts (w/ the headerBuffer populated)
 	 * @throws java.io.IOException
 	 */
-	private static byte[] readNextRecord(DataInputStream in, StringBuffer headerBuffer)
-			throws IOException {
+	private static byte[] readNextRecord(DataInputStream in,
+			StringBuffer headerBuffer) throws IOException {
 		if (in == null) {
 			return null;
 		}
@@ -202,7 +203,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 		// make sure we get the content length here
 		int contentLength = -1;
 		boolean foundContentLength = false;
-		while (!foundContentLength && inHeader && ((line = readLineFromInputStream(in)) != null)) {
+		while (!foundContentLength && inHeader
+				&& ((line = readLineFromInputStream(in)) != null)) {
 			if ((line.trim().length() == 0) && foundContentLength) {
 				inHeader = false;
 			} else {
@@ -210,10 +212,12 @@ public class ClueWeb09WarcRecord extends Indexable {
 				headerBuffer.append(NEWLINE);
 				String[] thisHeaderPieceParts = line.split(":", 2);
 				if (thisHeaderPieceParts.length == 2) {
-					if (thisHeaderPieceParts[0].toLowerCase().startsWith("content-length")) {
+					if (thisHeaderPieceParts[0].toLowerCase().startsWith(
+							"content-length")) {
 						foundContentLength = true;
 						try {
-							contentLength = Integer.parseInt(thisHeaderPieceParts[1].trim());
+							contentLength = Integer
+									.parseInt(thisHeaderPieceParts[1].trim());
 						} catch (NumberFormatException nfEx) {
 							contentLength = -1;
 						}
@@ -262,7 +266,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 	 * @return a WARC record (or null if eof)
 	 * @throws java.io.IOException
 	 */
-	public static ClueWeb09WarcRecord readNextWarcRecord(DataInputStream in) throws IOException {
+	public static ClueWeb09WarcRecord readNextWarcRecord(DataInputStream in)
+			throws IOException {
 		StringBuffer recordHeader = new StringBuffer();
 		byte[] recordContent = readNextRecord(in, recordHeader);
 		if (recordContent == null) {
@@ -348,7 +353,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 			out.writeUTF(dateString);
 			out.writeUTF(recordType);
 			out.writeInt(metadata.size());
-			Iterator<Entry<String, String>> metadataIterator = metadata.entrySet().iterator();
+			Iterator<Entry<String, String>> metadataIterator = metadata
+					.entrySet().iterator();
 			while (metadataIterator.hasNext()) {
 				Entry<String, String> thisEntry = metadataIterator.next();
 				out.writeUTF(thisEntry.getKey());
@@ -390,7 +396,8 @@ public class ClueWeb09WarcRecord extends Indexable {
 			retBuffer.append("WARC-Date: " + dateString + NEWLINE);
 
 			retBuffer.append("WARC-Record-ID: " + UUID + NEWLINE);
-			Iterator<Entry<String, String>> metadataIterator = metadata.entrySet().iterator();
+			Iterator<Entry<String, String>> metadataIterator = metadata
+					.entrySet().iterator();
 			while (metadataIterator.hasNext()) {
 				Entry<String, String> thisEntry = metadataIterator.next();
 				retBuffer.append(thisEntry.getKey());
@@ -644,10 +651,10 @@ public class ClueWeb09WarcRecord extends Indexable {
 		String str = getContentUTF8();
 		int i = str.indexOf("Content-Length:");
 		int j = str.indexOf("\n", i);
-		
-		return str.substring(j+1);
+
+		return str.substring(j + 1);
 	}
-	
+
 	public String getDisplayContentType() {
 		return "text/html";
 	}

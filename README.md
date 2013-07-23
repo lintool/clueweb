@@ -19,7 +19,7 @@ $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	-smoothing 1000 \
 	-output /user/chauff/res.dir1000 \
 	-queries /user/chauff/web.queries.trec2013 \
-	-vbdocvector /data/private/clueweb12/derived/docvectors.20130710/segm*/part* \
+	-docvector /data/private/clueweb12/derived/docvectors.20130710/segm*/part* \
 	-topk 1000
 ``` 
 
@@ -28,7 +28,7 @@ The parameters are:
 + `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
 + `output`: folder in which the TREC results are collected (in TREC result file format); to merge everything into one file in the end call `hadoop fs -getmerge /user/chauff/res.dir1000 res.dir1000`; the merged result file should run smoothly through `trec_eval`
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
-+ `vbdocvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
++ `docvector`: HDFS path to the document vectors created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder); PFor format expected
 + `topk`: number of results that should be returned per query (default is 1000)
 
 

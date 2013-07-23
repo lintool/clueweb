@@ -48,117 +48,124 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
 public class ProcessVByteDocVectors extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(ProcessVByteDocVectors.class);
+	private static final Logger LOG = Logger
+			.getLogger(ProcessVByteDocVectors.class);
 
-  private static final Joiner JOINER = Joiner.on("|");
+	private static final Joiner JOINER = Joiner.on("|");
 
-  private static class MyMapper extends Mapper<Text, BytesWritable, Text, Text> {
-	  
-    private static final VByteDocVector DOC = new VByteDocVector();
+	private static class MyMapper extends
+			Mapper<Text, BytesWritable, Text, Text> {
 
-    private DefaultFrequencySortedDictionary dictionary;
+		private static final VByteDocVector DOC = new VByteDocVector();
 
-    @Override
-    public void setup(Context context) throws IOException {
-      FileSystem fs = FileSystem.get(context.getConfiguration());
-      String path = context.getConfiguration().get(DICTIONARY_OPTION);
-      dictionary = new DefaultFrequencySortedDictionary(path, fs);
-    }
+		private DefaultFrequencySortedDictionary dictionary;
 
-    @Override
-    public void map(Text key, BytesWritable bytes, Context context)
-        throws IOException, InterruptedException {
-      VByteDocVector.fromBytesWritable(bytes, DOC);
+		@Override
+		public void setup(Context context) throws IOException {
+			FileSystem fs = FileSystem.get(context.getConfiguration());
+			String path = context.getConfiguration().get(DICTIONARY_OPTION);
+			dictionary = new DefaultFrequencySortedDictionary(path, fs);
+		}
 
-      List<String> terms = Lists.newArrayList();
-      for (int termid : DOC.getTermIds()) {
-        terms.add(dictionary.getTerm(termid));
-      }
+		@Override
+		public void map(Text key, BytesWritable bytes, Context context)
+				throws IOException, InterruptedException {
+			VByteDocVector.fromBytesWritable(bytes, DOC);
 
-      context.write(key, new Text(JOINER.join(terms)));
-    }
-  }
+			List<String> terms = Lists.newArrayList();
+			for (int termid : DOC.getTermIds()) {
+				terms.add(dictionary.getTerm(termid));
+			}
 
-  public static final String INPUT_OPTION = "input";
-  public static final String OUTPUT_OPTION = "output";
-  public static final String DICTIONARY_OPTION = "dictionary";
+			context.write(key, new Text(JOINER.join(terms)));
+		}
+	}
 
-  /**
-   * Runs this tool.
-   */
-  @SuppressWarnings("static-access")
-  public int run(String[] args) throws Exception {
-    Options options = new Options();
+	public static final String INPUT_OPTION = "input";
+	public static final String OUTPUT_OPTION = "output";
+	public static final String DICTIONARY_OPTION = "dictionary";
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
+	/**
+	 * Runs this tool.
+	 */
+	@SuppressWarnings("static-access")
+	public int run(String[] args) throws Exception {
+		Options options = new Options();
 
-    CommandLine cmdline;
-    CommandLineParser parser = new GnuParser();
-    try {
-      cmdline = parser.parse(options, args);
-    } catch (ParseException exp) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp(this.getClass().getName(), options);
-      ToolRunner.printGenericCommandUsage(System.out);
-      System.err.println("Error parsing command line: " + exp.getMessage());
-      return -1;
-    }
+		options.addOption(OptionBuilder.withArgName("path").hasArg()
+				.withDescription("input path").create(INPUT_OPTION));
+		options.addOption(OptionBuilder.withArgName("path").hasArg()
+				.withDescription("output path").create(OUTPUT_OPTION));
+		options.addOption(OptionBuilder.withArgName("path").hasArg()
+				.withDescription("dictionary").create(DICTIONARY_OPTION));
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
-        !cmdline.hasOption(DICTIONARY_OPTION)) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp(this.getClass().getName(), options);
-      ToolRunner.printGenericCommandUsage(System.out);
-      return -1;
-    }
+		CommandLine cmdline;
+		CommandLineParser parser = new GnuParser();
+		try {
+			cmdline = parser.parse(options, args);
+		} catch (ParseException exp) {
+			HelpFormatter formatter = new HelpFormatter();
+			formatter.printHelp(this.getClass().getName(), options);
+			ToolRunner.printGenericCommandUsage(System.out);
+			System.err.println("Error parsing command line: "
+					+ exp.getMessage());
+			return -1;
+		}
 
-    String input = cmdline.getOptionValue(INPUT_OPTION);
-    String output = cmdline.getOptionValue(OUTPUT_OPTION);
-    String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+		if (!cmdline.hasOption(INPUT_OPTION)
+				|| !cmdline.hasOption(OUTPUT_OPTION)
+				|| !cmdline.hasOption(DICTIONARY_OPTION)) {
+			HelpFormatter formatter = new HelpFormatter();
+			formatter.printHelp(this.getClass().getName(), options);
+			ToolRunner.printGenericCommandUsage(System.out);
+			return -1;
+		}
 
-    LOG.info("Tool name: " + ProcessVByteDocVectors.class.getSimpleName());
-    LOG.info(" - input: " + input);
-    LOG.info(" - output: " + output);
-    LOG.info(" - dictionary: " + dictionary);
+		String input = cmdline.getOptionValue(INPUT_OPTION);
+		String output = cmdline.getOptionValue(OUTPUT_OPTION);
+		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 
-    Job job = new Job(getConf(), ProcessVByteDocVectors.class.getSimpleName() + ":" + input);
-    job.setJarByClass(ProcessVByteDocVectors.class);
+		LOG.info("Tool name: " + ProcessVByteDocVectors.class.getSimpleName());
+		LOG.info(" - input: " + input);
+		LOG.info(" - output: " + output);
+		LOG.info(" - dictionary: " + dictionary);
 
-    job.setNumReduceTasks(0);
+		Job job = new Job(getConf(),
+				ProcessVByteDocVectors.class.getSimpleName() + ":" + input);
+		job.setJarByClass(ProcessVByteDocVectors.class);
 
-    FileInputFormat.setInputPaths(job, input);
-    FileOutputFormat.setOutputPath(job, new Path(output));
+		job.setNumReduceTasks(0);
 
-    job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
+		FileInputFormat.setInputPaths(job, input);
+		FileOutputFormat.setOutputPath(job, new Path(output));
 
-    job.setInputFormatClass(SequenceFileInputFormat.class);
-    job.setOutputFormatClass(TextOutputFormat.class);
+		job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
 
-    job.setMapOutputKeyClass(Text.class);
-    job.setMapOutputValueClass(Text.class);
+		job.setInputFormatClass(SequenceFileInputFormat.class);
+		job.setOutputFormatClass(TextOutputFormat.class);
 
-    job.setMapperClass(MyMapper.class);
+		job.setMapOutputKeyClass(Text.class);
+		job.setMapOutputValueClass(Text.class);
 
-    FileSystem.get(getConf()).delete(new Path(output), true);
+		job.setMapperClass(MyMapper.class);
 
-    long startTime = System.currentTimeMillis();
-    job.waitForCompletion(true);
-    LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
+		FileSystem.get(getConf()).delete(new Path(output), true);
 
-    return 0;
-  }
+		long startTime = System.currentTimeMillis();
+		job.waitForCompletion(true);
+		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
+				/ 1000.0 + " seconds");
 
-  /**
-   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
-   */
-  public static void main(String[] args) throws Exception {
-    LOG.info("Running " + ProcessVByteDocVectors.class.getCanonicalName() + " with args "
-        + Arrays.toString(args));
-    ToolRunner.run(new ProcessVByteDocVectors(), args);
-  }
+		return 0;
+	}
+
+	/**
+	 * Dispatches command-line arguments to the tool via the
+	 * <code>ToolRunner</code>.
+	 */
+	public static void main(String[] args) throws Exception {
+		LOG.info("Running " + ProcessVByteDocVectors.class.getCanonicalName()
+				+ " with args " + Arrays.toString(args));
+		ToolRunner.run(new ProcessVByteDocVectors(), args);
+	}
 }

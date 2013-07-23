@@ -1,7 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -33,25 +31,26 @@
  * 
  * (4) MyReducer: for each query
  * 			4.1 create a priority queue (minimum heap): we only need to keep the topk highest probability scores
- * 			4.2 once all key/values for a query are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
- * 			4.3 output the results for a query in TREC result file format
+ * 			4.2 once all key/values are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
+ * 			4.3 output the results in TREC result file format
  * 
  */
 
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -63,10 +62,8 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
@@ -81,12 +78,12 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.util.Version;
+import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
-import org.clueweb.data.VByteDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.dictionary.PorterAnalyzer;
 
+import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
 import tl.lin.lucene.AnalyzerUtils;
@@ -120,10 +117,12 @@ public class LMRetrieval extends Configured implements Tool {
 		@Override
 		public int compare(PairOfStringFloat o1, PairOfStringFloat o2) {
 
-			if (o1.getRightElement() == o2.getRightElement())
+			if (o1.getRightElement() == o2.getRightElement()) {
 				return 0;
-			if (o1.getRightElement() > o2.getRightElement())
+			}
+			if (o1.getRightElement() > o2.getRightElement()) {
 				return 1;
+			}
 			return -1;
 		}
 	}
@@ -132,14 +131,15 @@ public class LMRetrieval extends Configured implements Tool {
 	 * Mapper outKey: (qid,docid), value: probability score
 	 */
 	private static class MyMapper extends
-			Mapper<Text, BytesWritable, PairOfIntString, FloatWritable> {
+			Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
 
-		private static final VByteDocVector DOC = new VByteDocVector();
+		private static final PForDocVector DOC = new PForDocVector();
 		private DefaultFrequencySortedDictionary dictionary;
 		private TermStatistics stats;
 		private double smoothingParam;
-		private static final Analyzer ANALYZER = new StandardAnalyzer(
-				Version.LUCENE_43);
+		// private static final Analyzer ANALYZER = new
+		// StandardAnalyzer(Version.LUCENE_43);
+		private static final Analyzer ANALYZER = new PorterAnalyzer();
 
 		/*
 		 * for quick access store the queries in two hashmaps: 1. key: termid,
@@ -162,15 +162,8 @@ public class LMRetrieval extends Configured implements Tool {
 			dictionary = new DefaultFrequencySortedDictionary(path, fs);
 			stats = new TermStatistics(new Path(path), fs);
 
-			try {
-				smoothingParam = Double.parseDouble(context.getConfiguration()
-						.get(SMOOTHING));
-			} catch (NumberFormatException e) {
-				LOG.info("Smoothing is expected to parse into a double, found: "
-						+ context.getConfiguration().get(SMOOTHING));
-				LOG.info("Smoothing set to 1000 (thus Dirichlet smoothing) due to an error in parsing!");
-				smoothingParam = 1000;
-			}
+			smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
+			LOG.info("Smoothing set to "+smoothingParam);
 
 			// read the queries from file
 			termidQuerySet = Maps.newHashMap();
@@ -203,12 +196,12 @@ public class LMRetrieval extends Configured implements Tool {
 
 					termidSet.add(termid);
 
-					if (termidQuerySet.containsKey(termid))
+					if (termidQuerySet.containsKey(termid)) {
 						termidQuerySet.get(termid).add(qid);
-					else {
-						HashSet<Integer> qids = Sets.newHashSet();
+					} else {
+						Set<Integer> qids = Sets.newHashSet();
 						qids.add(qid);
-						termidQuerySet.put(termid, qids);
+						termidQuerySet.put(termid, (HashSet<Integer>) qids);
 					}
 				}
 
@@ -219,10 +212,10 @@ public class LMRetrieval extends Configured implements Tool {
 		}
 
 		@Override
-		public void map(Text key, BytesWritable bytes, Context context)
+		public void map(Text key, IntArrayWritable ints, Context context)
 				throws IOException, InterruptedException {
 
-			VByteDocVector.fromBytesWritable(bytes, DOC);
+			PForDocVector.fromIntArrayWritable(ints, DOC);
 
 			// determine which queries we care about for this document
 			HashSet<Integer> queriesToDo = Sets.newHashSet();
@@ -235,9 +228,11 @@ public class LMRetrieval extends Configured implements Tool {
 					tf += tfMap.get(termid);
 				tfMap.put(termid, tf);
 
-				if (termidQuerySet.containsKey(termid))
-					for (int qid : termidQuerySet.get(termid))
+				if (termidQuerySet.containsKey(termid)) {
+					for (int qid : termidQuerySet.get(termid)) {
 						queriesToDo.add(qid);
+					}
+				}
 			}
 
 			// for each of the interesting queries, compute log(P(q|d))
@@ -256,13 +251,15 @@ public class LMRetrieval extends Configured implements Tool {
 					double prob = 0.0;
 
 					// JM smoothing
-					if (smoothingParam <= 1.0)
+					if (smoothingParam <= 1.0) {
 						prob = smoothingParam * mlProb + (1.0 - smoothingParam)
 								* colProb;
+					}
 					// Dirichlet smoothing
-					else
+					else {
 						prob = (double) (tf + smoothingParam * colProb)
 								/ (double) (DOC.getLength() + smoothingParam);
+					}
 
 					score += (float) Math.log(prob);
 				}
@@ -279,63 +276,45 @@ public class LMRetrieval extends Configured implements Tool {
 
 		private int topk;
 		// PairOfStringFloat is (docid,score)
-		private PriorityQueue<PairOfStringFloat> queue;
-		private int currentQuery;
+		private Map<Integer, PriorityQueue<PairOfStringFloat>> queueMap;
 		private static final NullWritable nullKey = NullWritable.get();
 		private static final Text valueOut = new Text();
 
 		public void setup(Context context) throws IOException {
-			try {
-				topk = Integer.parseInt(context.getConfiguration().get(TOPK));
-			} catch (NumberFormatException e) {
-				LOG.info("topK should parse into an Integer, instead is "
-						+ context.getConfiguration().get(TOPK));
-				topk = 1000;
-				LOG.info("Setting topK to " + topk);
-			}
+			
+			topk = context.getConfiguration().getInt(TOPK, 1000);
+			LOG.info("topk parameter set to "+topk);
 
-			queue = new PriorityQueue<PairOfStringFloat>(topk + 1,
-					new CustomComparator());
-			currentQuery = -1;
+			queueMap = Maps.newHashMap();
 		}
 
 		@Override
 		public void reduce(PairOfIntString key, Iterable<FloatWritable> values,
 				Context context) throws IOException, InterruptedException {
 
-			// we hit a new query, process what is currently in the priority
-			// queue
-			if (key.getLeftElement() != currentQuery) {
-				if (currentQuery > 0) {
-					// convert minimum heap into list in ascending order
-					List<PairOfStringFloat> orderedList = new ArrayList<PairOfStringFloat>();
-					while (queue.size() > 0)
-						orderedList.add(queue.remove());
+			int qid = key.getLeftElement();
 
-					// write out the list in TREC result file format
-					for (int i = orderedList.size(); i > 0; i--) {
-						PairOfStringFloat p = orderedList.get(i - 1);
-						valueOut.set(currentQuery + " Q0 " + p.getLeftElement()
-								+ " " + (orderedList.size() - i + 1) + " "
-								+ p.getRightElement() + " lmretrieval");
-						context.write(nullKey, valueOut);
-					}
-				}
+			PriorityQueue<PairOfStringFloat> queue = null;
 
-				// reset everything
-				queue.clear();
-				currentQuery = key.getLeftElement();
+			if (queueMap.containsKey(qid)) {
+				queue = queueMap.get(qid);
+			} else {
+				queue = new PriorityQueue<PairOfStringFloat>(topk + 1,
+						new CustomComparator());
+				queueMap.put(qid, queue);
 			}
 
 			// actually, it should only be a single element
 			float scoreSum = 0f;
-			for (FloatWritable v : values)
+			for (FloatWritable v : values) {
 				scoreSum += v.get();
+			}
 
 			// if there are less than topk elements, add the new (docid,score)
 			// to the queue
-			if (queue.size() < topk)
+			if (queue.size() < topk) {
 				queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
+			}
 			// if we have topk elements in the queue, we need to check if the
 			// queue's current minimum is smaller than
 			// the incoming score; if yes, "exchnage" the (docid,score) elements
@@ -345,19 +324,26 @@ public class LMRetrieval extends Configured implements Tool {
 			}
 		}
 
-		// in the cleanup, we still have to deal with the final query
+		// emit the scores for all queries
 		public void cleanup(Context context) throws IOException,
 				InterruptedException {
 
-			if (currentQuery > 0 && queue.size() > 0) {
+			for (int qid : queueMap.keySet()) {
+				PriorityQueue<PairOfStringFloat> queue = queueMap.get(qid);
+
+				if (queue.size() == 0) {
+					continue;
+				}
+
 				List<PairOfStringFloat> orderedList = new ArrayList<PairOfStringFloat>();
-				while (queue.size() > 0)
+				while (queue.size() > 0) {
 					orderedList.add(queue.remove());
+				}
 
 				for (int i = orderedList.size(); i > 0; i--) {
 					PairOfStringFloat p = orderedList.get(i - 1);
-					valueOut.set(currentQuery + " Q0 " + p.getLeftElement()
-							+ " " + (orderedList.size() - i + 1) + " "
+					valueOut.set(qid + " Q0 " + p.getLeftElement() + " "
+							+ (orderedList.size() - i + 1) + " "
 							+ p.getRightElement() + " lmretrieval");
 					context.write(nullKey, valueOut);
 				}
@@ -365,7 +351,7 @@ public class LMRetrieval extends Configured implements Tool {
 		}
 	}
 
-	public static final String VBDOCVECTOR_OPTION = "vbdocvector";
+	public static final String DOCVECTOR_OPTION = "docvector";
 	public static final String OUTPUT_OPTION = "output";
 	public static final String DICTIONARY_OPTION = "dictionary";
 	public static final String QUERIES_OPTION = "queries";
@@ -379,16 +365,19 @@ public class LMRetrieval extends Configured implements Tool {
 	public int run(String[] args) throws Exception {
 		Options options = new Options();
 
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path (seg*/part*)")
-				.create(VBDOCVECTOR_OPTION));
+		options.addOption(OptionBuilder
+				.withArgName("path")
+				.hasArg()
+				.withDescription(
+						"input path (pfor format expected, add seg*/part*)")
+				.create(DOCVECTOR_OPTION));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("output path").create(OUTPUT_OPTION));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("dictionary").create(DICTIONARY_OPTION));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("queries").create(QUERIES_OPTION));
-		options.addOption(OptionBuilder.withArgName("double").hasArg()
+		options.addOption(OptionBuilder.withArgName("float").hasArg()
 				.withDescription("smoothing").create(SMOOTHING));
 		options.addOption(OptionBuilder.withArgName("int").hasArg()
 				.withDescription("topk").create(TOPK));
@@ -406,7 +395,7 @@ public class LMRetrieval extends Configured implements Tool {
 			return -1;
 		}
 
-		if (!cmdline.hasOption(VBDOCVECTOR_OPTION)
+		if (!cmdline.hasOption(DOCVECTOR_OPTION)
 				|| !cmdline.hasOption(OUTPUT_OPTION)
 				|| !cmdline.hasOption(DICTIONARY_OPTION)
 				|| !cmdline.hasOption(QUERIES_OPTION)
@@ -417,7 +406,7 @@ public class LMRetrieval extends Configured implements Tool {
 			return -1;
 		}
 
-		String vbdocvector = cmdline.getOptionValue(VBDOCVECTOR_OPTION);
+		String docvector = cmdline.getOptionValue(DOCVECTOR_OPTION);
 		String output = cmdline.getOptionValue(OUTPUT_OPTION);
 		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 		String queries = cmdline.getOptionValue(QUERIES_OPTION);
@@ -425,7 +414,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String topk = cmdline.getOptionValue(TOPK);
 
 		LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
-		LOG.info(" - vbdocvector: " + vbdocvector);
+		LOG.info(" - docvector: " + docvector);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
 		LOG.info(" - queries: " + queries);
@@ -435,8 +424,8 @@ public class LMRetrieval extends Configured implements Tool {
 		Configuration conf = getConf();
 		conf.set(DICTIONARY_OPTION, dictionary);
 		conf.set(QUERIES_OPTION, queries);
-		conf.set(SMOOTHING, smoothing);
-		conf.set(TOPK, topk);
+		conf.setFloat(SMOOTHING, Float.parseFloat(smoothing));
+		conf.setInt(TOPK, Integer.parseInt(topk));
 
 		conf.set("mapreduce.map.memory.mb", "10048");
 		conf.set("mapreduce.map.java.opts", "-Xmx10048m");
@@ -449,10 +438,10 @@ public class LMRetrieval extends Configured implements Tool {
 			fs.delete(new Path(output));
 
 		Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":"
-				+ vbdocvector);
+				+ docvector);
 		job.setJarByClass(LMRetrieval.class);
 
-		FileInputFormat.setInputPaths(job, vbdocvector);
+		FileInputFormat.setInputPaths(job, docvector);
 		FileOutputFormat.setOutputPath(job, new Path(output));
 
 		job.setInputFormatClass(SequenceFileInputFormat.class);

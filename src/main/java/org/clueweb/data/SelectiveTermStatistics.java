@@ -29,122 +29,127 @@ import org.clueweb.clueweb12.app.BuildDictionary;
 import com.google.common.base.Preconditions;
 
 public class SelectiveTermStatistics {
-  private final int numTerms;
-  private final long[] cfs;
-  private final int[] dfs;
+	private final int numTerms;
+	private final long[] cfs;
+	private final int[] dfs;
 
-  private long collectionSize;
+	private long collectionSize;
 
-  private long maxCf = 0;
-  private int maxCfTerm;
+	private long maxCf = 0;
+	private int maxCfTerm;
 
-  private int maxDf = 0;
-  private int maxDfTerm;
+	private int maxDf = 0;
+	private int maxDfTerm;
 
-  /**
-   * Creates a {@code CfTable} object.
-   *
-   * @param file collection frequency data file
-   * @throws IOException
-   */
-  
-  /*
-   * NOTE: does not work as I expected, unable to read standard merged collection statistics
-   */
-  
-  public SelectiveTermStatistics(Path file) throws IOException {
-    this(file, FileSystem.get(new Configuration()));
-  }
-  
+	/**
+	 * Creates a {@code CfTable} object.
+	 * 
+	 * @param file
+	 *            collection frequency data file
+	 * @throws IOException
+	 */
 
-  /**
-   * Creates a {@code CfTable} object.
-   *
-   * @param file collection frequency data file
-   * @param fs FileSystem to read from
-   * @throws IOException
-   */
-  public SelectiveTermStatistics(Path file, FileSystem fs) throws IOException {
-    Preconditions.checkNotNull(file);
-    Preconditions.checkNotNull(fs);
+	/*
+	 * NOTE: does not work as I expected, unable to read standard merged
+	 * collection statistics
+	 */
 
-    FSDataInputStream in = fs.open(new Path(file, BuildDictionary.CF_BY_ID_DATA));
-    this.numTerms = in.readInt();
+	public SelectiveTermStatistics(Path file) throws IOException {
+		this(file, FileSystem.get(new Configuration()));
+	}
 
-    cfs = new long[numTerms];
+	/**
+	 * Creates a {@code CfTable} object.
+	 * 
+	 * @param file
+	 *            collection frequency data file
+	 * @param fs
+	 *            FileSystem to read from
+	 * @throws IOException
+	 */
+	public SelectiveTermStatistics(Path file, FileSystem fs) throws IOException {
+		Preconditions.checkNotNull(file);
+		Preconditions.checkNotNull(fs);
 
-    for (int i = 0; i < numTerms; i++) {
-      long cf = WritableUtils.readVLong(in);
+		FSDataInputStream in = fs.open(new Path(file,
+				BuildDictionary.CF_BY_ID_DATA));
+		this.numTerms = in.readInt();
 
-      cfs[i] = cf;
-      collectionSize += cf;
+		cfs = new long[numTerms];
 
-      if (cf > maxCf) {
-        maxCf = cf;
-        maxCfTerm = i + 1;
-      }
-    }
+		for (int i = 0; i < numTerms; i++) {
+			long cf = WritableUtils.readVLong(in);
 
-    in.close();
+			cfs[i] = cf;
+			collectionSize += cf;
 
-    in = fs.open(new Path(file, BuildDictionary.DF_BY_ID_DATA));
-    if (numTerms != in.readInt() ) {
-      throw new IOException("df data and cf data should have the same number of entries!");
-    }
+			if (cf > maxCf) {
+				maxCf = cf;
+				maxCfTerm = i + 1;
+			}
+		}
 
-    dfs = new int[numTerms];
+		in.close();
 
-    for (int i = 0; i < numTerms; i++) {
-      int df = WritableUtils.readVInt(in);
+		in = fs.open(new Path(file, BuildDictionary.DF_BY_ID_DATA));
+		if (numTerms != in.readInt()) {
+			throw new IOException(
+					"df data and cf data should have the same number of entries!");
+		}
 
-      dfs[i] = df;
+		dfs = new int[numTerms];
 
-      if (df > maxDf) {
-        maxDf = df;
-        maxDfTerm = i + 1;
-      }
-    }
+		for (int i = 0; i < numTerms; i++) {
+			int df = WritableUtils.readVInt(in);
 
-    in.close();
-  }
+			dfs[i] = df;
 
-  public int getDf(int term) {
-    if (term <= 0 || term > numTerms) {
-      return 0;
-    }
-    return dfs[term - 1];
-  }
+			if (df > maxDf) {
+				maxDf = df;
+				maxDfTerm = i + 1;
+			}
+		}
 
-  public long getCf(int term) {
-    if (term <= 0 || term > numTerms) {
-      return 0;
-    }
+		in.close();
+	}
 
-    return cfs[term - 1];
-  }
+	public int getDf(int term) {
+		if (term <= 0 || term > numTerms) {
+			return 0;
+		}
+		return dfs[term - 1];
+	}
 
-  public long getCollectionSize() {
-    return collectionSize;
-  }
+	public long getCf(int term) {
+		if (term <= 0 || term > numTerms) {
+			return 0;
+		}
 
-  public int getVocabularySize() {
-    return numTerms;
-  }
+		return cfs[term - 1];
+	}
 
-  public int getMaxDf() {
-    return maxDf;
-  }
+	public long getCollectionSize() {
+		return collectionSize;
+	}
 
-  public long getMaxCf() {
-    return maxCf;
-  }
+	public int getVocabularySize() {
+		return numTerms;
+	}
 
-  public int getMaxDfTerm() {
-    return maxDfTerm;
-  }
+	public int getMaxDf() {
+		return maxDf;
+	}
 
-  public int getMaxCfTerm() {
-    return maxCfTerm;
-  }
+	public long getMaxCf() {
+		return maxCf;
+	}
+
+	public int getMaxDfTerm() {
+		return maxDfTerm;
+	}
+
+	public int getMaxCfTerm() {
+		return maxCfTerm;
+	}
 
 }

@@ -46,94 +46,98 @@ import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapred.ClueWeb12InputFormat;
 
 public class CountWarcRecordsOld extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(CountWarcRecordsOld.class);
+	private static final Logger LOG = Logger
+			.getLogger(CountWarcRecordsOld.class);
 
-  private static enum Records {
-    TOTAL, PAGES
-  };
+	private static enum Records {
+		TOTAL, PAGES
+	};
 
-  private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
+	private static class MyMapper extends MapReduceBase implements
+			Mapper<Writable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
-    public void configure(JobConf job) {
-    }
+		public void configure(JobConf job) {
+		}
 
-    public void map(Writable key, ClueWeb12WarcRecord doc,
-        OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
-      reporter.incrCounter(Records.TOTAL, 1);
+		public void map(Writable key, ClueWeb12WarcRecord doc,
+				OutputCollector<NullWritable, NullWritable> output,
+				Reporter reporter) throws IOException {
+			reporter.incrCounter(Records.TOTAL, 1);
 
-      String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
-      if (docid != null) {
-        reporter.incrCounter(Records.PAGES, 1);
-      }
-    }
-  }
+			String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
+			if (docid != null) {
+				reporter.incrCounter(Records.PAGES, 1);
+			}
+		}
+	}
 
-  public CountWarcRecordsOld() {
-  }
+	public CountWarcRecordsOld() {
+	}
 
-  public static final String INPUT_OPTION = "input";
+	public static final String INPUT_OPTION = "input";
 
-  /**
-   * Runs this tool.
-   */
-  @SuppressWarnings("static-access")
-  public int run(String[] args) throws Exception {
-    Options options = new Options();
+	/**
+	 * Runs this tool.
+	 */
+	@SuppressWarnings("static-access")
+	public int run(String[] args) throws Exception {
+		Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
-        .create(INPUT_OPTION));
+		options.addOption(OptionBuilder.withArgName("path").hasArg()
+				.withDescription("input path").create(INPUT_OPTION));
 
-    CommandLine cmdline;
-    CommandLineParser parser = new GnuParser();
-    try {
-      cmdline = parser.parse(options, args);
-    } catch (ParseException exp) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp(this.getClass().getName(), options);
-      ToolRunner.printGenericCommandUsage(System.out);
-      System.err.println("Error parsing command line: " + exp.getMessage());
-      return -1;
-    }
+		CommandLine cmdline;
+		CommandLineParser parser = new GnuParser();
+		try {
+			cmdline = parser.parse(options, args);
+		} catch (ParseException exp) {
+			HelpFormatter formatter = new HelpFormatter();
+			formatter.printHelp(this.getClass().getName(), options);
+			ToolRunner.printGenericCommandUsage(System.out);
+			System.err.println("Error parsing command line: "
+					+ exp.getMessage());
+			return -1;
+		}
 
-    if (!cmdline.hasOption(INPUT_OPTION)) {
-      HelpFormatter formatter = new HelpFormatter();
-      formatter.printHelp(this.getClass().getName(), options);
-      ToolRunner.printGenericCommandUsage(System.out);
-      return -1;
-    }
+		if (!cmdline.hasOption(INPUT_OPTION)) {
+			HelpFormatter formatter = new HelpFormatter();
+			formatter.printHelp(this.getClass().getName(), options);
+			ToolRunner.printGenericCommandUsage(System.out);
+			return -1;
+		}
 
-    String input = cmdline.getOptionValue(INPUT_OPTION);
+		String input = cmdline.getOptionValue(INPUT_OPTION);
 
-    LOG.info("Tool name: " + CountWarcRecordsOld.class.getSimpleName());
-    LOG.info(" - input: " + input);
+		LOG.info("Tool name: " + CountWarcRecordsOld.class.getSimpleName());
+		LOG.info(" - input: " + input);
 
-    JobConf conf = new JobConf(getConf(), CountWarcRecordsOld.class);
-    conf.setJobName(CountWarcRecordsOld.class.getSimpleName() + ":" + input);
+		JobConf conf = new JobConf(getConf(), CountWarcRecordsOld.class);
+		conf.setJobName(CountWarcRecordsOld.class.getSimpleName() + ":" + input);
 
-    conf.setNumReduceTasks(0);
+		conf.setNumReduceTasks(0);
 
-    FileInputFormat.addInputPaths(conf, input);
+		FileInputFormat.addInputPaths(conf, input);
 
-    conf.setInputFormat(ClueWeb12InputFormat.class);
-    conf.setOutputFormat(NullOutputFormat.class);
-    conf.setMapperClass(MyMapper.class);
+		conf.setInputFormat(ClueWeb12InputFormat.class);
+		conf.setOutputFormat(NullOutputFormat.class);
+		conf.setMapperClass(MyMapper.class);
 
-    RunningJob job = JobClient.runJob(conf);
-    Counters counters = job.getCounters();
-    int numDocs = (int) counters.findCounter(Records.PAGES).getCounter();
+		RunningJob job = JobClient.runJob(conf);
+		Counters counters = job.getCounters();
+		int numDocs = (int) counters.findCounter(Records.PAGES).getCounter();
 
-    LOG.info("Read " + numDocs + " docs.");
+		LOG.info("Read " + numDocs + " docs.");
 
-    return 0;
-  }
+		return 0;
+	}
 
-  /**
-   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
-   */
-  public static void main(String[] args) throws Exception {
-    LOG.info("Running " + CountWarcRecordsOld.class.getCanonicalName() + " with args "
-        + Arrays.toString(args));
-    ToolRunner.run(new CountWarcRecordsOld(), args);
-  }
+	/**
+	 * Dispatches command-line arguments to the tool via the
+	 * <code>ToolRunner</code>.
+	 */
+	public static void main(String[] args) throws Exception {
+		LOG.info("Running " + CountWarcRecordsOld.class.getCanonicalName()
+				+ " with args " + Arrays.toString(args));
+		ToolRunner.run(new CountWarcRecordsOld(), args);
+	}
 }
