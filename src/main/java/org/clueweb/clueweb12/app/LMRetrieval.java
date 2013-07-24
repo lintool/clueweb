@@ -40,10 +40,8 @@ package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
 
-import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -64,7 +62,6 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
@@ -86,6 +83,7 @@ import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
+import org.clueweb.util.AnalyzerFactory;
 
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
@@ -169,13 +167,8 @@ public class LMRetrieval extends Configured implements Tool {
 			LOG.info("Smoothing set to "+smoothingParam);
 			
 			String analyzerType = context.getConfiguration().get(PREPROCESSING);
-			if(analyzerType.equals("standard")) {
-				ANALYZER = new org.apache.lucene.analysis.standard.StandardAnalyzer(Version.LUCENE_43);
-			}
-			else if(analyzerType.equals("porter")) {
-				ANALYZER = new PorterAnalyzer();
-			}
-			else {
+			ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+			if(ANALYZER==null) {
 				LOG.error("Error: proprocessing type not recognized. Abort "+this.getClass().getName());
 				System.exit(1);
 			}

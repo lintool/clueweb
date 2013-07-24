@@ -16,9 +16,13 @@
 
 package org.clueweb.clueweb12.app;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -27,7 +31,9 @@ import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
@@ -35,6 +41,7 @@ import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
@@ -42,15 +49,20 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
+import org.clueweb.data.TermStatistics;
+import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
+import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;
 import tl.lin.lucene.AnalyzerUtils;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 public class ComputeTermStatistics extends Configured implements Tool {
 	private static final Logger LOG = Logger
@@ -60,9 +72,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 		TOTAL, PAGES, ERRORS, SKIPPED
 	};
 
-	// private static final Analyzer ANALYZER = new
-	// StandardAnalyzer(Version.LUCENE_43);
-	private static final Analyzer ANALYZER = new PorterAnalyzer();
+	private static Analyzer ANALYZER;
 
 	private static final String HADOOP_DF_MIN_OPTION = "df.min";
 	private static final String HADOOP_DF_MAX_OPTION = "df.max";
@@ -78,6 +88,18 @@ public class ComputeTermStatistics extends Configured implements Tool {
 			Mapper<LongWritable, ClueWeb12WarcRecord, Text, PairOfIntLong> {
 		private static final Text term = new Text();
 		private static final PairOfIntLong pair = new PairOfIntLong();
+		
+		@Override
+		public void setup(Context context) throws IOException {
+
+			String analyzerType = context.getConfiguration().get(PREPROCESSING);
+			ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+			if(ANALYZER==null) {
+				LOG.error("Error: proprocessing type not recognized. Abort "+this.getClass().getName());
+				System.exit(1);
+			}
+		}
+
 
 		@Override
 		public void map(LongWritable key, ClueWeb12WarcRecord doc,
@@ -187,6 +209,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 	public static final String INPUT_OPTION = "input";
 	public static final String OUTPUT_OPTION = "output";
 	public static final String DF_MIN_OPTION = "dfMin";
+	public static final String PREPROCESSING = "preprocessing";
 
 	/**
 	 * Runs this tool.
@@ -201,6 +224,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
 				.withDescription("output path").create(OUTPUT_OPTION));
 		options.addOption(OptionBuilder.withArgName("num").hasArg()
 				.withDescription("minimum df").create(DF_MIN_OPTION));
+		options.addOption(OptionBuilder.withArgName("string (porter|standard)").hasArg()
+				.withDescription("preprocessing").create(PREPROCESSING));
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();
@@ -216,7 +241,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
 		}
 
 		if (!cmdline.hasOption(INPUT_OPTION)
-				|| !cmdline.hasOption(OUTPUT_OPTION)) {
+				|| !cmdline.hasOption(OUTPUT_OPTION)
+				|| !cmdline.hasOption(PREPROCESSING)) {
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp(this.getClass().getName(), options);
 			ToolRunner.printGenericCommandUsage(System.out);
@@ -225,11 +251,16 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
 		String input = cmdline.getOptionValue(INPUT_OPTION);
 		String output = cmdline.getOptionValue(OUTPUT_OPTION);
+		String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
 		LOG.info("Tool name: " + ComputeTermStatistics.class.getSimpleName());
 		LOG.info(" - input: " + input);
 		LOG.info(" - output: " + output);
+		LOG.info(" - preprocessing: "+preprocessing);
 
+		Configuration conf = getConf();
+		conf.set(PREPROCESSING, preprocessing);
+		
 		Job job = new Job(getConf(),
 				ComputeTermStatistics.class.getSimpleName() + ":" + input);
 		job.setJarByClass(ComputeTermStatistics.class);
