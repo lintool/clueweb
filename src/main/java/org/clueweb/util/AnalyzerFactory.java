@@ -40,4 +40,9 @@ public class AnalyzerFactory {
 		
 		return null;
 	}
+	
+	public static String getOptions()
+	{
+		return "standard|porter";
+	}
 }

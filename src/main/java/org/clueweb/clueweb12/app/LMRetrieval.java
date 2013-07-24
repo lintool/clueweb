@@ -391,7 +391,7 @@ public class LMRetrieval extends Configured implements Tool {
 				.withDescription("smoothing").create(SMOOTHING));
 		options.addOption(OptionBuilder.withArgName("int").hasArg()
 				.withDescription("topk").create(TOPK));
-		options.addOption(OptionBuilder.withArgName("string (porter|standard)").hasArg()
+		options.addOption(OptionBuilder.withArgName("string "+AnalyzerFactory.getOptions()).hasArg()
 				.withDescription("preprocessing").create(PREPROCESSING));
 
 

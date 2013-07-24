@@ -48,6 +48,7 @@ import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.VByteDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
@@ -60,8 +61,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 		TOTAL, PAGES, ERRORS, TOO_LONG
 	};
 
-	private static final Analyzer ANALYZER = new StandardAnalyzer(
-			Version.LUCENE_43);
+	private static Analyzer ANALYZER;
 
 	private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if
 															// long than this.
@@ -78,6 +78,13 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 			FileSystem fs = FileSystem.get(context.getConfiguration());
 			String path = context.getConfiguration().get(DICTIONARY_OPTION);
 			dictionary = new DefaultFrequencySortedDictionary(path, fs);
+			
+			String analyzerType = context.getConfiguration().get(PREPROCESSING);
+			ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+			if(ANALYZER==null) {
+				LOG.error("Error: proprocessing type not recognized. Abort "+this.getClass().getName());
+				System.exit(1);
+			}
 		}
 
 		@Override
@@ -141,6 +148,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 	public static final String OUTPUT_OPTION = "output";
 	public static final String DICTIONARY_OPTION = "dictionary";
 	public static final String REDUCERS_OPTION = "reducers";
+	public static final String PREPROCESSING = "preprocessing";
 
 	/**
 	 * Runs this tool.
@@ -157,6 +165,9 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 				.withDescription("dictionary").create(DICTIONARY_OPTION));
 		options.addOption(OptionBuilder.withArgName("num").hasArg()
 				.withDescription("number of reducers").create(REDUCERS_OPTION));
+		options.addOption(OptionBuilder.withArgName("string "+AnalyzerFactory.getOptions()).hasArg()
+				.withDescription("preprocessing").create(PREPROCESSING));
+
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();
@@ -173,7 +184,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 
 		if (!cmdline.hasOption(INPUT_OPTION)
 				|| !cmdline.hasOption(OUTPUT_OPTION)
-				|| !cmdline.hasOption(DICTIONARY_OPTION)) {
+				|| !cmdline.hasOption(DICTIONARY_OPTION)
+				|| !cmdline.hasOption(PREPROCESSING)) {
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp(this.getClass().getName(), options);
 			ToolRunner.printGenericCommandUsage(System.out);
@@ -183,6 +195,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 		String input = cmdline.getOptionValue(INPUT_OPTION);
 		String output = cmdline.getOptionValue(OUTPUT_OPTION);
 		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+		String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
 		Job job = new Job(getConf(), BuildVByteDocVectors.class.getSimpleName()
 				+ ":" + input);
@@ -192,6 +205,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 		LOG.info(" - input: " + input);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
+		LOG.info(" - preprocessing: "+preprocessing);
 
 		if (cmdline.hasOption(REDUCERS_OPTION)) {
 			int numReducers = Integer.parseInt(cmdline
@@ -206,6 +220,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 		FileOutputFormat.setOutputPath(job, new Path(output));
 
 		job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
+		job.getConfiguration().set(PREPROCESSING, preprocessing);
 
 		job.setInputFormatClass(ClueWeb12InputFormat.class);
 		job.setOutputFormatClass(SequenceFileOutputFormat.class);

@@ -224,8 +224,9 @@ public class ComputeTermStatistics extends Configured implements Tool {
 				.withDescription("output path").create(OUTPUT_OPTION));
 		options.addOption(OptionBuilder.withArgName("num").hasArg()
 				.withDescription("minimum df").create(DF_MIN_OPTION));
-		options.addOption(OptionBuilder.withArgName("string (porter|standard)").hasArg()
+		options.addOption(OptionBuilder.withArgName("string "+AnalyzerFactory.getOptions()).hasArg()
 				.withDescription("preprocessing").create(PREPROCESSING));
+
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();
