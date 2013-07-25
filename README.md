@@ -50,7 +50,7 @@ The organizer's baseline was run with Krovetz stemming, so we expect our Porter-
 
 |		| Standard	| Standard	    | Porter | Porter |
 | Query        | Top 10 Overlap | Top 1000 Overlap  | Top 10 Overlap | Top 1000 Overlap|
-| ------------ |:-------------:| ------------------:|----------------|----------------|
+| ------------ |:-------------:| :------------------:|:----------------:|:----------------:|
 | 201 | 90% | 84%   |90%|85%|
 | 202 | 60% | 88%   |70%|88%|
 | 203 | 60% | 66%   |70%|73%|
