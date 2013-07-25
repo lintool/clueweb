@@ -20,7 +20,7 @@
  * 
  * MyMapper: 
  * 	in setup() read the docids that make an appearance in the TREC result file (one of the inputs)
- * 	in map() walk over all spam score files and determine which docids from the step above are spam
+ * 	in map() walk over all spam score files and determine which docids from the step above are spam/no-spam
  * 	in cleanup() read the TREC result file one more time and emit all lines that have non-spam documents
  * 
  * MyReducer:
