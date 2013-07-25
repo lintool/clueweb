@@ -3,8 +3,8 @@ ClueWeb Tools
 
 Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
-Getting Stated
---------------
+Getting Started
+---------------
 
 You can clone the repo with the following command:
 
