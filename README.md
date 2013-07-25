@@ -46,7 +46,7 @@ To have confidence in the implementation, the baseline runs are compared with th
 
 Since no relevance judgments are available for ClueWeb12, we report the overlap in document ids among the top 10 / top 1000 ranked documents for each query between our baseline and the organizer ql baseline [results-catA.txt](https://github.com/trec-web/trec-web-2013/blob/master/data/runs/baselines/2013/ql/results-cata.txt). The Perl script to compute the overlap is [available as well](https://github.com/chauff/clueweb/blob/master/scripts/computeOverlap.pl). 
 
-The organizer's baseline was run with Krovetz stemming, so we expect our Porter-based to have higher overlap than the `standard` run. This is indeed the case. The few 0% queries can be explained by the different tokenization, HTML parsing and the different stemming approaches (Porter is more agressive than Krovetz). 
+The organizer's baseline was run with Krovetz stemming, so we expect the Porter-based run to have higher overlap than the `standard` run. This is indeed the case. The few 0% queries can be explained by the different tokenization, HTML parsing and the different stemming approaches (Porter is more agressive than Krovetz). 
 
 | Query | Standard Top 10 | Standard Top 1000| Porter Top 10| Porter Top 1000|
 |----|----|----|----|----|
