@@ -48,7 +48,7 @@ Since no relevance judgments are available for ClueWeb12, we report the overlap 
 
 The organizer's baseline was run with Krovetz stemming, so we expect our Porter-based to have higher overlap than the `standard` run. This is indeed the case. The few 0% queries can be explained by the different tokenization, HTML parsing and the different stemming approaches (Porter is more agressive than Krovetz). 
 
-
+|       | Standard | Standard | Porter | Porter |
 | Query | Top 10 Overlap | Top 1000 Overlap|Top 10 Overlap|Top 1000 Overlap|
 |----|----|----|----|----|
 | 201 | 90% | 84%   |90%|85%|
