@@ -197,12 +197,13 @@ public class SpamScoreFiltering extends Configured implements Tool {
 		String trecinput = cmdline.getOptionValue(TREC_RESULT_FILE);
 		String output = cmdline.getOptionValue(OUTPUT_OPTION);
 		String spamThreshold = cmdline.getOptionValue(SPAM_THRESHOLD);
+		String spamScoreFolder = cmdline.getOptionValue(SPAM_SCORES_FOLDER);
 
 		LOG.info("Tool name: " + SpamScoreFiltering.class.getSimpleName());
 		LOG.info(" - trecinputfile: " + trecinput);
 		LOG.info(" - output: " + output);
-		LOG.info(" - spam threshold: " + SPAM_THRESHOLD);
-		LOG.info(" - spam scores folder: " + SPAM_SCORES_FOLDER);
+		LOG.info(" - spam threshold: " + spamThreshold);
+		LOG.info(" - spam scores folder: " + spamScoreFolder);
 
 		Configuration conf = getConf();
 		conf.setInt(SPAM_THRESHOLD, Integer.parseInt(spamThreshold));
@@ -216,7 +217,7 @@ public class SpamScoreFiltering extends Configured implements Tool {
 		job.setJarByClass(SpamScoreFiltering.class);
 		job.setNumReduceTasks(1);
 
-		FileInputFormat.setInputPaths(job, SPAM_SCORES_FOLDER);
+		FileInputFormat.setInputPaths(job, spamScoreFolder);
 		FileOutputFormat.setOutputPath(job, new Path(output));
 
 		job.setInputFormatClass(TextInputFormat.class);
