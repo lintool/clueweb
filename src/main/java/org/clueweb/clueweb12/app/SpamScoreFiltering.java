@@ -60,6 +60,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
+
+import tl.lin.data.pair.PairOfInts;
+
 import com.google.common.collect.Maps;
 
 public class SpamScoreFiltering extends Configured implements Tool {
@@ -69,9 +72,9 @@ public class SpamScoreFiltering extends Configured implements Tool {
 	private static int autoIncrement = 0;
 
 	private static class MyMapper extends
-			Mapper<LongWritable, Text, IntWritable, Text> {
+			Mapper<LongWritable, Text, PairOfInts, Text> {
 
-		private static final IntWritable keyOut = new IntWritable();
+		private static final PairOfInts keyOut = new PairOfInts();
 		private static final Text valueOut = new Text();
 
 		// key: docid, value: spam indicator
@@ -92,7 +95,7 @@ public class SpamScoreFiltering extends Configured implements Tool {
 			String line;
 			while ((line = br.readLine()) != null) {
 				String tokens[] = line.split("\\s+");
-				docids.put(tokens[2], 1);// nothing is spam right now
+				docids.put(tokens[2], 0);
 			}
 			fsin.close();
 			br.close();
@@ -103,6 +106,7 @@ public class SpamScoreFiltering extends Configured implements Tool {
 				throws IOException, InterruptedException {
 
 			String tokens[] = value.toString().split("\\s+");
+			
 
 			if (!docids.containsKey(tokens[1])) {
 				return;
@@ -110,7 +114,13 @@ public class SpamScoreFiltering extends Configured implements Tool {
 
 			// declare as spam (the higher the score the less spammy it is)
 			if (Integer.parseInt(tokens[0]) < spamThreshold)
-				docids.put(tokens[1], -1);
+			{
+				docids.put(tokens[1], -1);//spam
+			}
+			else
+			{
+				docids.put(tokens[1], 1);//no spam
+			}
 		}
 
 		@Override
@@ -125,8 +135,8 @@ public class SpamScoreFiltering extends Configured implements Tool {
 			String line;
 			while ((line = br.readLine()) != null) {
 				String tokens[] = line.split("\\s+");
-				if (docids.get(tokens[2]) > 0) {
-					keyOut.set(autoIncrement++);
+				if (docids.get(tokens[2]) == 1) {
+					keyOut.set(Integer.parseInt(tokens[0]),Integer.parseInt(tokens[3]));
 					valueOut.set(line);
 					context.write(keyOut, valueOut);
 				}
@@ -137,12 +147,12 @@ public class SpamScoreFiltering extends Configured implements Tool {
 	}
 
 	private static class MyReducer extends
-			Reducer<IntWritable, Text, NullWritable, Text> {
+			Reducer<PairOfInts, Text, NullWritable, Text> {
 
 		private static final NullWritable nullKey = NullWritable.get();
 
 		@Override
-		public void reduce(IntWritable key, Iterable<Text> values,
+		public void reduce(PairOfInts key, Iterable<Text> values,
 				Context context) throws IOException, InterruptedException {
 
 			context.write(nullKey, values.iterator().next());
@@ -222,7 +232,7 @@ public class SpamScoreFiltering extends Configured implements Tool {
 
 		job.setInputFormatClass(TextInputFormat.class);
 
-		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputKeyClass(PairOfInts.class);
 		job.setMapOutputValueClass(Text.class);
 		job.setOutputKeyClass(NullWritable.class);
 		job.setOutputValueClass(Text.class);
