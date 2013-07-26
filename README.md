@@ -102,10 +102,10 @@ $ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar \
 ```
 
 The parameters are:
-+`docidsfile`: a file with one docid per line; all docids are extracted from the WARC input files
-+`input`: list of WARC files
-+`keephtml`: parameter that is either `true` (keep the HTML source of each document) or `false` (parse the documents, remove HTML)
-+`output`: folder where the documents' content is stored - one file per docid
++ `docidsfile`: a file with one docid per line; all docids are extracted from the WARC input files
++ `input`: list of WARC files
++ `keephtml`: parameter that is either `true` (keep the HTML source of each document) or `false` (parse the documents, remove HTML)
++ `output`: folder where the documents' content is stored - one file per docid
 
 
 Retrieval runs
