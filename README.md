@@ -60,6 +60,54 @@ The parameters are:
 + `trecinputfile`: HDFS path to the TREC result file which is used as starting point for filtering
 
 
+
+De-duplication
+--------------
+To increase diversity, duplicate documents can be removed from the result ranking (in effect pushing lower ranked results up the ranking).
+
+A simple cosine based similarity approach is implemented in `DuplicateFiltering`: every document at rank x is compared to all non-duplicate documents at higher ranks. If its cosine similarity is high enough, it is filtered out.
+
+To run the code, call:
+
+```
+$ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.DuplicateFiltering 
+	-cosineSimThreshold 0.8 \ 
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-output /user/chauff/res.dir1000.porter.deduplicated \
+	-topk 1000 \
+	-trecinputfile /user/chauff/res.dir1000.porter
+```
+
+The parameters (apart from the usual ones) are:
++ `cosineSimThreshold`: documents having a cosine similarity above this threshold are removed from the result file
++ `trecinputfile`: file in TREC result format which is used as a starting point for de-duplication
+
+
+Document extraction
+-------------------
+
+A helper app: given a file with a list of docids, it extracts the documents' content from the WARC files.
+
+To run the code, call:
+
+```
+$ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.DocumentExtractor \
+	-docidsfile /user/chauff/docids \
+	-input /data/private/clueweb12/Disk*/*/*/*.warc.gz \
+	-keephtml false \
+	-output /user/chauff/docids-output
+```
+
+The parameters are:
++`docidsfile`: a file with one docid per line; all docids are extracted from the WARC input files
++`input`: list of WARC files
++`keephtml`: parameter that is either `true` (keep the HTML source of each document) or `false` (parse the documents, remove HTML)
++`output`: folder where the documents' content is stored - one file per docid
+
+
 Retrieval runs
 --------------
 The files `runs/res.dir1000.{standard,porter}` contain the baseline results when running the above retrieval program (i.e. LM with Dirichlet smoothing and mu=1000) with `standard` and `porter` preprocessing respectively.

@@ -54,6 +54,7 @@ import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
@@ -78,6 +79,10 @@ import com.google.common.collect.Sets;
 public class DocumentExtractor extends Configured implements Tool {
 	private static final Logger LOG = Logger
 			.getLogger(DocumentExtractor.class);
+	
+	private static enum Records {
+		DOCUMENTS_FOUND
+	};
 
 	private static boolean keepHTML;
 	private static final HashMap<String,String> docidMap = Maps.newHashMap();
@@ -121,6 +126,7 @@ public class DocumentExtractor extends Configured implements Tool {
 						content = Jsoup.parse(content).text();
 					}
 					docidMap.put(docid, content);
+					context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
 
 				} catch (Exception e) {
 					// If Jsoup throws any exceptions, catch and move on.
@@ -221,11 +227,15 @@ public class DocumentExtractor extends Configured implements Tool {
 		job.setJarByClass(DocumentExtractor.class);
 
 		FileInputFormat.setInputPaths(job, input);
+		
 		job.setInputFormatClass(ClueWeb12InputFormat.class);
+		job.setOutputFormatClass(NullOutputFormat.class);
+
 		job.setMapOutputKeyClass(NullWritable.class);
 		job.setMapOutputValueClass(NullWritable.class);
 
 		job.setMapperClass(MyMapper.class);
+		job.setNumReduceTasks(0);
 
 		FileSystem.get(getConf()).delete(new Path(output), true);
 
@@ -233,6 +243,9 @@ public class DocumentExtractor extends Configured implements Tool {
 		job.waitForCompletion(true);
 		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
 				/ 1000.0 + " seconds");
+		
+		int numDocsFound = (int) job.getCounters().findCounter(Records.DOCUMENTS_FOUND).getValue();
+		LOG.info("Number of documents found: "+numDocsFound);
 
 		return 0;
 	}

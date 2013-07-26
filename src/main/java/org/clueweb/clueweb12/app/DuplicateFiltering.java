@@ -1,6 +1,7 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
 
+
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -45,6 +46,7 @@ import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -74,6 +76,7 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
+
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfInts;
@@ -84,6 +87,10 @@ import com.google.common.collect.Sets;
 public class DuplicateFiltering extends Configured implements Tool {
 
 	private static final Logger LOG = Logger.getLogger(DuplicateFiltering.class);
+	
+	private static enum Records {
+		DUPLICATES
+	};
 
 	/*
 	 * we need to emit [termid1 weight1 termid2 weight2 ...] as value in
@@ -165,13 +172,13 @@ public class DuplicateFiltering extends Configured implements Tool {
 		@Override
 		public void map(Text key, IntArrayWritable ints, Context context)
 				throws IOException, InterruptedException {
-
-			PForDocVector.fromIntArrayWritable(ints, DOC);
-
+			
 			// is the document of interest to us?
 			if (!docidResults.containsKey(key.toString())) {
 				return;
 			}
+			
+			PForDocVector.fromIntArrayWritable(ints, DOC);
 
 			// tfMap of the document
 			HashMap<Integer, Integer> tfMap = Maps.newHashMap();
@@ -213,6 +220,7 @@ public class DuplicateFiltering extends Configured implements Tool {
 		private float cosineSimThreshold;
 		private static final NullWritable nullKey = NullWritable.get();
 		private static final Text valueOut = new Text();
+		
 		// outer key: qid, inner key: rank, inner value: term weights of the
 		// document at rank for query
 		private static final HashMap<Integer, HashMap<Integer, HashMap<Integer, Float>>> termWeightsPerQuery = Maps
@@ -309,6 +317,7 @@ public class DuplicateFiltering extends Configured implements Tool {
 
 						if (sim >= cosineSimThreshold) {
 							termWeights.remove(r);
+							context.getCounter(Records.DUPLICATES).increment(1);
 							break;
 						}
 					}
@@ -343,7 +352,7 @@ public class DuplicateFiltering extends Configured implements Tool {
 		Options options = new Options();
 
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path pfor docvec (seg*/part*)")
+				.withDescription("input path (pfor format expected, add * to retrieve files)")
 				.create(DOCVECTOR_OPTION));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("input path").create(TREC_RESULT_FILE));
@@ -430,6 +439,10 @@ public class DuplicateFiltering extends Configured implements Tool {
 		job.waitForCompletion(true);
 		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
 				/ 1000.0 + " seconds");
+		
+		int numDuplicates = (int) job.getCounters().findCounter(Records.DUPLICATES).getValue();
+		LOG.info("Number of duplicates: "+numDuplicates);
+
 		return 0;
 	}
 

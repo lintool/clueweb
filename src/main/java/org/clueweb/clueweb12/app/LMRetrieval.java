@@ -379,7 +379,7 @@ public class LMRetrieval extends Configured implements Tool {
 				.withArgName("path")
 				.hasArg()
 				.withDescription(
-						"input path (pfor format expected, add seg*/part*)")
+						"input path (pfor format expected, add * to retrieve files)")
 				.create(DOCVECTOR_OPTION));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("output path").create(OUTPUT_OPTION));
