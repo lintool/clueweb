@@ -12,37 +12,13 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
  * implied. See the License for the specific language governing
  * permissions and limitations under the License.
- * 
- * @author: Claudia Hauff
- * 
- * Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type: 
- *    smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.
- * 
- * Approach:
- * 
- * (1) read the queries and convert into termids (based on the dictionary);
- *      make sure to use the same Lucene Analyzer as in ComputeTermStatistics.java
- * 
- * (2) MyMapper: walk over all document vectors
- *      2.1 determine all queries which have at least one query term is occurring in the document
- *      2.2 for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
- * 
- * (3) MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
- * 
- * (4) MyReducer: for each query
- *      4.1 create a priority queue (minimum heap): we only need to keep the topk highest probability scores
- *      4.2 once all key/values are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
- *      4.3 output the results in TREC result file format
- * 
  */
 
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -78,11 +54,9 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
 
 import tl.lin.data.array.IntArrayWritable;
@@ -90,11 +64,39 @@ import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
 import tl.lin.lucene.AnalyzerUtils;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
+/**
+ * <p>Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type: 
+ * smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.</p>
+ *
+ * <p>Approach:</p>
+ *
+ * <ol>
+ * <li> read the queries and convert into termids (based on the dictionary);
+ *      make sure to use the same Lucene Analyzer as in ComputeTermStatistics.java
+ * 
+ * <li> MyMapper: walk over all document vectors
+ *   <ul>
+ *      <li> determine all queries which have at least one query term is occurring in the document
+ *      <li> for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
+ *   </ul>
+ *
+ * <li> MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
+ * 
+ * <li> MyReducer: for each query
+ *   <ul>
+ *      <li> create a priority queue (minimum heap): we only need to keep the topk highest probability scores
+ *      <li> once all key/values are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
+ *      <li> output the results in TREC result file format
+ *   </ul>
+ * </ol>
+ *
+ * @author Claudia Hauff
+ */
 public class LMRetrieval extends Configured implements Tool {
-
   private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
 
   /*
@@ -142,17 +144,16 @@ public class LMRetrieval extends Configured implements Tool {
      * for quick access store the queries in two hashmaps: 1. key: termid, value: list of queries in
      * which the termid occurs 2. key: qid, value: list of termids that occur in the query
      */
-    private HashMap<Integer, HashSet<Integer>> termidQuerySet;
-    private HashMap<Integer, HashSet<Integer>> queryTermidSet;
+    private Map<Integer, Set<Integer>> termidQuerySet;
+    private Map<Integer, Set<Integer>> queryTermidSet;
 
     // complex key: (qid,docid)
     private static final PairOfIntString keyOut = new PairOfIntString();
     // value: float; probability score log(P(q|d))
-    private static final FloatWritable valueOut = new FloatWritable();// score
+    private static final FloatWritable valueOut = new FloatWritable();
 
     @Override
     public void setup(Context context) throws IOException {
-
       FileSystem fs = FileSystem.get(context.getConfiguration());
       String path = context.getConfiguration().get(DICTIONARY_OPTION);
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
@@ -165,7 +166,7 @@ public class LMRetrieval extends Configured implements Tool {
       ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
       if (ANALYZER == null) {
         LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
-        System.exit(1);
+        return;
       }
 
       // read the queries from file
@@ -177,18 +178,17 @@ public class LMRetrieval extends Configured implements Tool {
       while ((line = br.readLine()) != null) {
         int index = line.indexOf(':');
         if (index < 0) {
-          LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
+          LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\nInstead got:\n"
               + line);
           continue;
         }
         int qid = Integer.parseInt(line.substring(0, index));
-        HashSet<Integer> termidSet = Sets.newHashSet();
+        Set<Integer> termidSet = Sets.newHashSet();
 
         LOG.info("Parsing query line " + line);
 
         // normalize the terms (same way as the documents)
         for (String term : AnalyzerUtils.parse(ANALYZER, line.substring(index + 1))) {
-
           int termid = dictionary.getId(term);
           LOG.info("parsed term [" + term + "] has termid " + termid);
 
@@ -214,9 +214,8 @@ public class LMRetrieval extends Configured implements Tool {
     }
 
     @Override
-    public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
-        InterruptedException {
-
+    public void map(Text key, IntArrayWritable ints, Context context)
+        throws IOException, InterruptedException {
       PForDocVector.fromIntArrayWritable(ints, DOC);
 
       // determine which queries we care about for this document
@@ -274,7 +273,6 @@ public class LMRetrieval extends Configured implements Tool {
 
   private static class MyReducer extends
       Reducer<PairOfIntString, FloatWritable, NullWritable, Text> {
-
     private int topk;
     // PairOfStringFloat is (docid,score)
     private Map<Integer, PriorityQueue<PairOfStringFloat>> queueMap;
@@ -282,7 +280,6 @@ public class LMRetrieval extends Configured implements Tool {
     private static final Text valueOut = new Text();
 
     public void setup(Context context) throws IOException {
-
       topk = context.getConfiguration().getInt(TOPK, 1000);
       LOG.info("topk parameter set to " + topk);
 
@@ -292,7 +289,6 @@ public class LMRetrieval extends Configured implements Tool {
     @Override
     public void reduce(PairOfIntString key, Iterable<FloatWritable> values, Context context)
         throws IOException, InterruptedException {
-
       int qid = key.getLeftElement();
 
       PriorityQueue<PairOfStringFloat> queue = null;
@@ -310,14 +306,12 @@ public class LMRetrieval extends Configured implements Tool {
         scoreSum += v.get();
       }
 
-      // if there are less than topk elements, add the new (docid,score)
-      // to the queue
+      // if there are less than topk elements, add the new (docid, score) to the queue
       if (queue.size() < topk) {
         queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
       }
-      // if we have topk elements in the queue, we need to check if the
-      // queue's current minimum is smaller than
-      // the incoming score; if yes, "exchnage" the (docid,score) elements
+      // if we have topk elements in the queue, we need to check if the queue's current minimum is
+      // smaller than the incoming score; if yes, "exchange" the (docid,score) elements
       else if (queue.peek().getRightElement() < scoreSum) {
         queue.remove();
         queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
@@ -326,7 +320,6 @@ public class LMRetrieval extends Configured implements Tool {
 
     // emit the scores for all queries
     public void cleanup(Context context) throws IOException, InterruptedException {
-
       for (int qid : queueMap.keySet()) {
         PriorityQueue<PairOfStringFloat> queue = queueMap.get(qid);
 
@@ -334,7 +327,7 @@ public class LMRetrieval extends Configured implements Tool {
           continue;
         }
 
-        List<PairOfStringFloat> orderedList = new ArrayList<PairOfStringFloat>();
+        List<PairOfStringFloat> orderedList = Lists.newArrayList();
         while (queue.size() > 0) {
           orderedList.add(queue.remove());
         }
@@ -360,23 +353,23 @@ public class LMRetrieval extends Configured implements Tool {
   /**
    * Runs this tool.
    */
-  @SuppressWarnings({ "static-access", "deprecation" })
+  @SuppressWarnings({ "static-access" })
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("input path (pfor format expected, add * to retrieve files)")
         .create(DOCVECTOR_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
-        .create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
-        .create(DICTIONARY_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("queries")
-        .create(QUERIES_OPTION));
-    options.addOption(OptionBuilder.withArgName("float").hasArg().withDescription("smoothing")
-        .create(SMOOTHING));
-    options.addOption(OptionBuilder.withArgName("int").hasArg().withDescription("topk")
-        .create(TOPK));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("queries").create(QUERIES_OPTION));
+    options.addOption(OptionBuilder.withArgName("float").hasArg()
+        .withDescription("smoothing").create(SMOOTHING));
+    options.addOption(OptionBuilder.withArgName("int").hasArg()
+        .withDescription("topk").create(TOPK));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
 
@@ -430,11 +423,12 @@ public class LMRetrieval extends Configured implements Tool {
     conf.set("mapreduce.map.java.opts", "-Xmx10048m");
     conf.set("mapreduce.reduce.memory.mb", "10048");
     conf.set("mapreduce.reduce.java.opts", "-Xmx10048m");
-    conf.set("mapred.task.timeout", "6000000");// default is 600000
+    conf.set("mapred.task.timeout", "6000000"); // default is 600000
 
     FileSystem fs = FileSystem.get(conf);
-    if (fs.exists(new Path(output)))
-      fs.delete(new Path(output));
+    if (fs.exists(new Path(output))) {
+      fs.delete(new Path(output), true);
+    }
 
     Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":" + docvector);
     job.setJarByClass(LMRetrieval.class);

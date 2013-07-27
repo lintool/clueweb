@@ -42,8 +42,6 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.VByteDocVector;
@@ -86,9 +84,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     }
 
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
-        InterruptedException {
-
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
+        throws IOException, InterruptedException {
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -150,12 +147,12 @@ public class BuildVByteDocVectors extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
-        .create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
-        .create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
-        .create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("input path").create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("dictionary").create(DICTIONARY_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
         .withDescription("number of reducers").create(REDUCERS_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()

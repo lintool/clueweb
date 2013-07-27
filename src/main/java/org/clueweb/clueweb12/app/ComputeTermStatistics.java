@@ -44,7 +44,6 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
-import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
@@ -65,8 +64,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
 
-  private static final int MAX_TOKEN_LENGTH = 64; // Throw away tokens longer than this.
-  private static final int MIN_DF_DEFAULT = 100; // Throw away terms with df less than this.
+  private static final int MAX_TOKEN_LENGTH = 64;       // Throw away tokens longer than this.
+  private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
   private static class MyMapper extends
@@ -193,12 +192,12 @@ public class ComputeTermStatistics extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
-        .create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
-        .create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("minimum df")
-        .create(DF_MIN_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("input path").create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg()
+        .withDescription("minimum df").create(DF_MIN_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
 
