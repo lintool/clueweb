@@ -47,6 +47,7 @@ import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.array.IntArrayWritable;
@@ -55,13 +56,16 @@ import tl.lin.lucene.AnalyzerUtils;
 public class BuildPForDocVectors extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(BuildPForDocVectors.class);
 
-  private static enum Records { TOTAL, PAGES, ERRORS, TOO_LONG };
+  private static enum Records {
+    TOTAL, PAGES, ERRORS, TOO_LONG
+  };
 
-  private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
+  private static Analyzer ANALYZER;
 
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, IntArrayWritable> {
+  private static class MyMapper extends
+      Mapper<LongWritable, ClueWeb12WarcRecord, Text, IntArrayWritable> {
     private static final Text DOCID = new Text();
     private static final IntArrayWritable DOC = new IntArrayWritable();
 
@@ -72,12 +76,19 @@ public class BuildPForDocVectors extends Configured implements Tool {
       FileSystem fs = FileSystem.get(context.getConfiguration());
       String path = context.getConfiguration().get(DICTIONARY_OPTION);
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
+
+      String analyzerType = context.getConfiguration().get(PREPROCESSING);
+      ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+      if (ANALYZER == null) {
+        LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
+        System.exit(1);
+      }
     }
 
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
-        throws IOException, InterruptedException {
-      
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
+
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -91,8 +102,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
           // If the document is excessively long, it usually means that something is wrong (e.g., a
           // binary object). Skip so the parsing doesn't choke.
           // As an alternative, we might want to consider putting in a timeout, e.g.,
-          //    http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
-          if ( content.length() > MAX_DOC_LENGTH ) {
+          // http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
+          if (content.length() > MAX_DOC_LENGTH) {
             LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
             context.getCounter(Records.TOO_LONG).increment(1);
             PForDocVector.toIntArrayWritable(DOC, new int[] {}, 0);
@@ -115,11 +126,10 @@ public class BuildPForDocVectors extends Configured implements Tool {
 
           PForDocVector.toIntArrayWritable(DOC, termids, len);
           context.write(DOCID, DOC);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
           LOG.info("Error caught processing " + docid);
-          DOC.setArray(new int[] {});  // Clean up possible corrupted data
+          DOC.setArray(new int[] {}); // Clean up possible corrupted data
           context.getCounter(Records.ERRORS).increment(1);
           PForDocVector.toIntArrayWritable(DOC, new int[] {}, 0);
           context.write(DOCID, DOC);
@@ -132,6 +142,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
   public static final String OUTPUT_OPTION = "output";
   public static final String DICTIONARY_OPTION = "dictionary";
   public static final String REDUCERS_OPTION = "reducers";
+  public static final String PREPROCESSING = "preprocessing";
 
   /**
    * Runs this tool.
@@ -140,14 +151,16 @@ public class BuildPForDocVectors extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
         .withDescription("number of reducers").create(REDUCERS_OPTION));
+    options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
+        .withDescription("preprocessing").create(PREPROCESSING));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -161,8 +174,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
-        !cmdline.hasOption(DICTIONARY_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(PREPROCESSING)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -172,6 +185,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+    String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
     Job job = new Job(getConf(), BuildPForDocVectors.class.getSimpleName() + ":" + input);
     job.setJarByClass(BuildPForDocVectors.class);
@@ -180,6 +194,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
+    LOG.info(" - preprocessing: " + preprocessing);
 
     if (cmdline.hasOption(REDUCERS_OPTION)) {
       int numReducers = Integer.parseInt(cmdline.getOptionValue(REDUCERS_OPTION));
@@ -193,6 +208,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
+    job.getConfiguration().set(PREPROCESSING, preprocessing);
 
     job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);

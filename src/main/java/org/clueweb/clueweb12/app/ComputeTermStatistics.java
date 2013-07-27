@@ -45,6 +45,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.dictionary.PorterAnalyzer;
+import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;
@@ -55,26 +56,39 @@ import com.google.common.collect.Maps;
 public class ComputeTermStatistics extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(ComputeTermStatistics.class);
 
-  private static enum Records { TOTAL, PAGES, ERRORS, SKIPPED };
+  private static enum Records {
+    TOTAL, PAGES, ERRORS, SKIPPED
+  };
 
-  //private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
-  private static final Analyzer ANALYZER = new PorterAnalyzer();
+  private static Analyzer ANALYZER;
 
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
-  
-  private static final int MAX_TOKEN_LENGTH = 64;       // Throw away tokens longer than this.
-  private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
+
+  private static final int MAX_TOKEN_LENGTH = 64; // Throw away tokens longer than this.
+  private static final int MIN_DF_DEFAULT = 100; // Throw away terms with df less than this.
   private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
-  private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, PairOfIntLong> {
+  private static class MyMapper extends
+      Mapper<LongWritable, ClueWeb12WarcRecord, Text, PairOfIntLong> {
     private static final Text term = new Text();
     private static final PairOfIntLong pair = new PairOfIntLong();
 
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
-        throws IOException, InterruptedException {
-      
+    public void setup(Context context) throws IOException {
+
+      String analyzerType = context.getConfiguration().get(PREPROCESSING);
+      ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+      if (ANALYZER == null) {
+        LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
+        System.exit(1);
+      }
+    }
+
+    @Override
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
+
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -86,8 +100,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
           // If the document is excessively long, it usually means that something is wrong (e.g., a
           // binary object). Skip so the parsing doesn't choke.
           // As an alternative, we might want to consider putting in a timeout, e.g.,
-          //    http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
-          if ( content.length() > MAX_DOC_LENGTH ) {
+          // http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
+          if (content.length() > MAX_DOC_LENGTH) {
             LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
             context.getCounter(Records.SKIPPED).increment(1);
             return;
@@ -126,7 +140,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
     @Override
     public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
+        throws IOException, InterruptedException {
       int df = 0;
       long cf = 0;
       for (PairOfIntLong pair : values) {
@@ -152,7 +166,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
     @Override
     public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
+        throws IOException, InterruptedException {
       int df = 0;
       long cf = 0;
       for (PairOfIntLong pair : values) {
@@ -170,6 +184,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
   public static final String DF_MIN_OPTION = "dfMin";
+  public static final String PREPROCESSING = "preprocessing";
 
   /**
    * Runs this tool.
@@ -178,12 +193,14 @@ public class ComputeTermStatistics extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg()
-        .withDescription("minimum df").create(DF_MIN_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("minimum df")
+        .create(DF_MIN_OPTION));
+    options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
+        .withDescription("preprocessing").create(PREPROCESSING));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -197,7 +214,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(PREPROCESSING)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -206,10 +224,14 @@ public class ComputeTermStatistics extends Configured implements Tool {
 
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
     LOG.info("Tool name: " + ComputeTermStatistics.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
+    LOG.info(" - preprocessing: " + preprocessing);
+
+    getConf().set(PREPROCESSING, preprocessing);
 
     Job job = new Job(getConf(), ComputeTermStatistics.class.getSimpleName() + ":" + input);
     job.setJarByClass(ComputeTermStatistics.class);
