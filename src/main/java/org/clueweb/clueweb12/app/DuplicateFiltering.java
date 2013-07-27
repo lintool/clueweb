@@ -165,8 +165,9 @@ public class DuplicateFiltering extends Configured implements Tool {
 				}
 				set.add(line);
 			}
-			fsin.close();
 			br.close();
+			fsin.close();
+			
 		}
 
 		@Override

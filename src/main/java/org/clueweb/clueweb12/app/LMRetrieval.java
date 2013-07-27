@@ -216,8 +216,8 @@ public class LMRetrieval extends Configured implements Tool {
 
 				queryTermidSet.put(qid, termidSet);
 			}
-			fsin.close();
 			br.close();
+			fsin.close();
 		}
 
 		@Override

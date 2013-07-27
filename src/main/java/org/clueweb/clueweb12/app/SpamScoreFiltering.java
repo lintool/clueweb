@@ -69,7 +69,6 @@ public class SpamScoreFiltering extends Configured implements Tool {
 
 	private static final Logger LOG = Logger
 			.getLogger(SpamScoreFiltering.class);
-	private static int autoIncrement = 0;
 
 	private static class MyMapper extends
 			Mapper<LongWritable, Text, PairOfInts, Text> {
@@ -141,8 +140,8 @@ public class SpamScoreFiltering extends Configured implements Tool {
 					context.write(keyOut, valueOut);
 				}
 			}
-			fsin.close();
 			br.close();
+			fsin.close();
 		}
 	}
 

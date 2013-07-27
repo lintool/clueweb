@@ -1,6 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -16,13 +15,21 @@
  * 
  * @author Claudia Hauff
  * 
- * Takes as input a file with docids (one per line) and outputs their content into the output folder.
+ * Takes as input a file with docids (one per line) and writes their content to file.
+ * 
+ * MyMapper:
+ * 	2.1 the docids are read from the file in setup()
+ * 	2.2 all *warc.gz files are read in map() and if the right docid is hit, the content is stored
+ * 	2.3 the cleanup() method writes the content of all found docids to file
+ * 
+ * Reducer: no reducer necessary, all work is done in MyMapper
  */
 
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -81,7 +88,7 @@ public class DocumentExtractor extends Configured implements Tool {
 			.getLogger(DocumentExtractor.class);
 	
 	private static enum Records {
-		DOCUMENTS_FOUND
+		DOCUMENTS_FOUND, JSOUP_EXCEPTIONS
 	};
 
 	private static boolean keepHTML;
@@ -104,7 +111,9 @@ public class DocumentExtractor extends Configured implements Tool {
 			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
 			String line;
 			while ((line = br.readLine()) != null) {
-				docidMap.put(line,EMPTY);
+				if(line.length()>5) {
+					docidMap.put(line,EMPTY);
+				}
 			}
 			fsin.close();
 			br.close();
@@ -120,17 +129,18 @@ public class DocumentExtractor extends Configured implements Tool {
 			String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
 			if (docid != null && docidMap.containsKey(docid)) {
 				try {
-					String content = doc.getContent();
 
 					if(!keepHTML) {
-						content = Jsoup.parse(content).text();
+						docidMap.put(docid, Jsoup.parse(doc.getContent()).text());
 					}
-					docidMap.put(docid, content);
+					else {
+						docidMap.put(docid, doc.getContent());
+					}
 					context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
-
 				} catch (Exception e) {
 					// If Jsoup throws any exceptions, catch and move on.
 					LOG.info("Error caught processing " + docid);
+					context.getCounter(Records.JSOUP_EXCEPTIONS).increment(1);
 				}
 			}
 		}
@@ -140,8 +150,8 @@ public class DocumentExtractor extends Configured implements Tool {
 
 			FileSystem fs = FileSystem.get(context.getConfiguration());	
 			String outputFolder = context.getConfiguration().get(OUTPUT_OPTION);
-			if(!outputFolder.endsWith("/"))
-				outputFolder += "/";
+			if(!outputFolder.endsWith(File.separator))
+				outputFolder += File.separator;
 			
 			for(String docid : docidMap.keySet())
 			{
@@ -153,8 +163,8 @@ public class DocumentExtractor extends Configured implements Tool {
 				FSDataOutputStream fsout = fs.create(p);
 				BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
 				bw.write(docidMap.get(docid));
-				fsout.close();
 				bw.close();
+				fsout.close();
 				
 				LOG.info("Written document content to "+p.toString());
 			}
@@ -237,8 +247,6 @@ public class DocumentExtractor extends Configured implements Tool {
 		job.setMapperClass(MyMapper.class);
 		job.setNumReduceTasks(0);
 
-		FileSystem.get(getConf()).delete(new Path(output), true);
-
 		long startTime = System.currentTimeMillis();
 		job.waitForCompletion(true);
 		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
@@ -246,6 +254,9 @@ public class DocumentExtractor extends Configured implements Tool {
 		
 		int numDocsFound = (int) job.getCounters().findCounter(Records.DOCUMENTS_FOUND).getValue();
 		LOG.info("Number of documents found: "+numDocsFound);
+		
+		int numExceptions = (int) job.getCounters().findCounter(Records.JSOUP_EXCEPTIONS).getValue();
+		LOG.info("Number of Jsoup exceptions: "+numExceptions);
 
 		return 0;
 	}
