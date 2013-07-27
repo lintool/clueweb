@@ -14,9 +14,7 @@
  * permissions and limitations under the License.
  */
 
-package org.clueweb.clueweb12.mapred;
-
-/**
+/*
  * Hadoop FileInputFormat for reading WARC files
  *
  * (C) 2009 - Carnegie Mellon University
@@ -50,6 +48,8 @@ package org.clueweb.clueweb12.mapred;
  * @author mhoy@cs.cmu.edu (Mark J. Hoy)
  */
 
+package org.clueweb.clueweb12.mapred;
+
 import java.io.DataInputStream;
 import java.io.IOException;
 
@@ -65,9 +65,9 @@ import org.apache.hadoop.mapred.InputSplit;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
-import org.clueweb.data.ClueWarcRecord;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 
-public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcRecord> {
+public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb12WarcRecord> {
 
   /**
    * Don't allow the files to be split!
@@ -81,12 +81,12 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
   /**
    * Just return the record reader
    */
-  public RecordReader<LongWritable, ClueWarcRecord> getRecordReader(InputSplit split, JobConf conf,
+  public RecordReader<LongWritable, ClueWeb12WarcRecord> getRecordReader(InputSplit split, JobConf conf,
       Reporter reporter) throws IOException {
     return new ClueWarcRecordReader(conf, (FileSplit) split);
   }
 
-  public static class ClueWarcRecordReader implements RecordReader<LongWritable, ClueWarcRecord> {
+  public static class ClueWarcRecordReader implements RecordReader<LongWritable, ClueWeb12WarcRecord> {
     private long recordCount = 1;
     private Path path = null;
     private DataInputStream input = null;
@@ -103,10 +103,10 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
     }
 
     @Override
-    public boolean next(LongWritable key, ClueWarcRecord value) throws IOException {
+    public boolean next(LongWritable key, ClueWeb12WarcRecord value) throws IOException {
       DataInputStream whichStream = input;
 
-      ClueWarcRecord newRecord = ClueWarcRecord.readNextWarcRecord(whichStream);
+      ClueWeb12WarcRecord newRecord = ClueWeb12WarcRecord.readNextWarcRecord(whichStream);
       if (newRecord == null) {
         return false;
       }
@@ -127,8 +127,8 @@ public class ClueWarcInputFormat extends FileInputFormat<LongWritable, ClueWarcR
     }
 
     @Override
-    public ClueWarcRecord createValue() {
-      return new ClueWarcRecord();
+    public ClueWeb12WarcRecord createValue() {
+      return new ClueWeb12WarcRecord();
     }
 
     @Override

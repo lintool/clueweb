@@ -1,3 +1,10 @@
+Version 0.3
+===========
+July 28, 2013
+
++ Added incomplete/untested support for ClueWeb09 (refactored package structure)
++ Added Basic LM Retrieval (currently hard-coded for PForDocVectors)
+
 Version 0.2
 ===========
 July 14, 2013

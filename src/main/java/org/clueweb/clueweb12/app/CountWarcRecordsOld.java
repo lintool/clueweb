@@ -27,12 +27,10 @@ import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapred.Counters;
 import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.FileOutputFormat;
 import org.apache.hadoop.mapred.JobClient;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapred.MapReduceBase;
@@ -40,60 +38,38 @@ import org.apache.hadoop.mapred.Mapper;
 import org.apache.hadoop.mapred.OutputCollector;
 import org.apache.hadoop.mapred.Reporter;
 import org.apache.hadoop.mapred.RunningJob;
-import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapred.lib.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.util.Version;
-import org.clueweb.clueweb12.mapred.ClueWarcInputFormat;
-import org.clueweb.data.ClueWarcRecord;
-import org.jsoup.Jsoup;
+import org.clueweb.clueweb12.ClueWeb12WarcRecord;
+import org.clueweb.clueweb12.mapred.ClueWeb12InputFormat;
 
-import tl.lin.lucene.AnalyzerUtils;
+public class CountWarcRecordsOld extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(CountWarcRecordsOld.class);
 
-import com.google.common.base.Joiner;
-
-public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DumpClueWarcRecordsToPlainText.class);
-
-  private static enum Records { TOTAL, PAGES, ERRORS };
-  private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
-  private static final Joiner JOINER = Joiner.on("|");
+  private static enum Records { TOTAL, PAGES };
 
   private static class MyMapper extends MapReduceBase implements
-      Mapper<Writable, ClueWarcRecord, Text, Text> {
-    private static final Text KEY = new Text();
-    private static final Text VALUE = new Text();
+      Mapper<Writable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
     public void configure(JobConf job) {}
 
-    public void map(Writable key, ClueWarcRecord doc, OutputCollector<Text, Text> output,
-        Reporter reporter) throws IOException {
+    public void map(Writable key, ClueWeb12WarcRecord doc,
+        OutputCollector<NullWritable, NullWritable> output, Reporter reporter) throws IOException {
       reporter.incrCounter(Records.TOTAL, 1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
       if (docid != null) {
         reporter.incrCounter(Records.PAGES, 1);
-        try {
-          KEY.set(docid);
-          String cleaned = Jsoup.parse(doc.getContent()).text().replaceAll("[\\r\\n]+", " ");
-          cleaned = JOINER.join(AnalyzerUtils.parse(ANALYZER, cleaned));
-          VALUE.set(cleaned);
-          output.collect(KEY, VALUE);
-        } catch (Exception e) {
-          // If Jsoup throws any exceptions, catch and move on.
-          reporter.incrCounter(Records.ERRORS, 1);
-        }
       }
     }
   }
 
-  public DumpClueWarcRecordsToPlainText() {}
+  public CountWarcRecordsOld() {
+  }
 
   public static final String INPUT_OPTION = "input";
-  public static final String OUTPUT_OPTION = "output";
 
   /**
    * Runs this tool.
@@ -104,8 +80,6 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
 
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -119,7 +93,7 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -127,22 +101,19 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
     }
 
     String input = cmdline.getOptionValue(INPUT_OPTION);
-    String output = cmdline.getOptionValue(OUTPUT_OPTION);
 
-    LOG.info("Tool name: " + DumpClueWarcRecordsToPlainText.class.getSimpleName());
+    LOG.info("Tool name: " + CountWarcRecordsOld.class.getSimpleName());
     LOG.info(" - input: " + input);
-    LOG.info(" - output: " + output);
 
-    JobConf conf = new JobConf(getConf(), DumpClueWarcRecordsToPlainText.class);
-    conf.setJobName(DumpClueWarcRecordsToPlainText.class.getSimpleName() + ":" + input);
+    JobConf conf = new JobConf(getConf(), CountWarcRecordsOld.class);
+    conf.setJobName(CountWarcRecordsOld.class.getSimpleName() + ":" + input);
 
     conf.setNumReduceTasks(0);
 
     FileInputFormat.addInputPaths(conf, input);
-    FileOutputFormat.setOutputPath(conf, new Path(output));
 
-    conf.setInputFormat(ClueWarcInputFormat.class);
-    conf.setOutputFormat(TextOutputFormat.class);
+    conf.setInputFormat(ClueWeb12InputFormat.class);
+    conf.setOutputFormat(NullOutputFormat.class);
     conf.setMapperClass(MyMapper.class);
 
     RunningJob job = JobClient.runJob(conf);
@@ -158,8 +129,8 @@ public class DumpClueWarcRecordsToPlainText extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DumpClueWarcRecordsToPlainText.class.getCanonicalName() + " with args "
+    LOG.info("Running " + CountWarcRecordsOld.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DumpClueWarcRecordsToPlainText(), args);
+    ToolRunner.run(new CountWarcRecordsOld(), args);
   }
 }

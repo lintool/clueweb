@@ -1,7 +1,7 @@
 ClueWeb Tools
 =============
 
-This is a collection of tools for manipulating the [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
+Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
 Sign up to the mailing list at [the clueweb-list@cwi.nl mailman page](https://lists.cwi.nl/mailman/listinfo/clueweb-list).
 
@@ -136,7 +136,7 @@ Size comparisons, on the entire ClueWeb12 collection:
 + 5.54 TB: original compressed WARC files
 + 1.08 TB: repackaged as `VByteDocVector`s
 + 0.86 TB: repackaged as `PForDocVector`s
-+ ~1.6 TB: uncompressed termids (collection size is around ~400 billion terms)
++ ~1.6 TB: uncompressed termids (collection size is ~400 billion terms)
 
 License
 -------

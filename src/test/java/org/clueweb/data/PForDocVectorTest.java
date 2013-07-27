@@ -17,38 +17,105 @@ public class PForDocVectorTest {
   private static final Random RANDOM = new Random();
 
   @Test
-  public void testCode() throws Exception {
+  public void testPFor1() throws Exception {
+    int len = 256;
     FastPFOR p4 = new FastPFOR();
-    int[] doc = new int[256];
-    for (int i = 0; i<256; i++) {
+    int[] doc = new int[len];
+    for (int i = 0; i<len; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
     IntWrapper inPos = new IntWrapper(0);
     IntWrapper outPos = new IntWrapper(0);
 
-    //System.out.println(doc.length + ": " + Arrays.toString(doc));
-    int[] out = new int[256];
+    int[] out = new int[len];
     p4.compress(doc, inPos, doc.length, out, outPos);
 
     int[] trimmedOut = new int[outPos.get()];
     System.arraycopy(out, 0, trimmedOut, 0, outPos.get());
 
     assertTrue(trimmedOut.length < doc.length);
-    //System.out.println(trimmedOut.length + ": " + Arrays.toString(trimmedOut));
 
     IntWrapper cinPos = new IntWrapper(0);
     IntWrapper coutPos = new IntWrapper(0);
-    int[] reconstructed = new int[256];
-    p4.uncompress(trimmedOut, cinPos, trimmedOut.length, reconstructed, coutPos);
-
-    //System.out.println(cinPos + " " + coutPos);
-    //System.out.println(reconstructed.length + ": " + Arrays.toString(reconstructed));
+    int[] reconstructed = new int[len];
+    int r = RANDOM.nextInt();
+    // Interesting behavior of the PFor decompressor: r doesn't matter.
+    p4.uncompress(trimmedOut, cinPos, r, reconstructed, coutPos);
     
     assertEquals(doc.length, reconstructed.length);
     for (int i = 0; i < doc.length; i++) {
       assertEquals(doc[i], reconstructed[i]);
     }
+  }
+
+  @Test
+  public void testPFor2() throws Exception {
+    int len = 23;
+    FastPFOR p4 = new FastPFOR();
+    int[] doc = new int[len];
+    for (int i = 0; i<len; i++) {
+      doc[i] = RANDOM.nextInt(10000);
+    }
+
+    IntWrapper inPos = new IntWrapper(0);
+    IntWrapper outPos = new IntWrapper(0);
+
+    int[] out = new int[len];
+    // We're purposely only compressing 23 values here, which is smaller than a PFor block size,
+    // just to see what would happen...
+    p4.compress(doc, inPos, len, out, outPos);
+
+    assertEquals(0, inPos.get());
+    // Indeed, the PFor compressor refuses to process the input stream.
+    assertEquals(1, outPos.get());
+    // But why has the output stream incremented?
+  }
+
+  @Test
+  public void testPFor3() throws Exception {
+    int len = 129;
+    FastPFOR p4 = new FastPFOR();
+    int[] doc = new int[len];
+    for (int i = 0; i<len; i++) {
+      doc[i] = RANDOM.nextInt(10000);
+    }
+
+    IntWrapper inPos = new IntWrapper(0);
+    IntWrapper outPos = new IntWrapper(0);
+
+    int[] out = new int[len];
+    // We're purposely only compressing 129 values here, which is one more than a PFor block.
+    p4.compress(doc, inPos, len, out, outPos);
+
+    assertEquals(128, inPos.get());
+    // Indeed, the PFor compressor processes one block and that's it. (Even though we told it to
+    // compress all 129 values).
+  }
+
+  @Test
+  public void testPFor4() throws Exception {
+    int len = 128 * 4 + 1;
+    FastPFOR p4 = new FastPFOR();
+    int[] doc = new int[len];
+    for (int i = 0; i<len; i++) {
+      doc[i] = RANDOM.nextInt(10000);
+    }
+
+    IntWrapper inPos = new IntWrapper(0);
+    IntWrapper outPos = new IntWrapper(0);
+
+    int[] out = new int[len];
+    // There are multiple blocks here, but we're tell it to compress only one block.
+    p4.compress(doc, inPos, 128, out, outPos);
+
+    assertEquals(128, inPos.get());
+    // And indeed, the compression complies.
+
+    // Now tell it to compress the rest.
+    p4.compress(doc, inPos, 128 * 3 + 1, out, outPos);
+    assertEquals(128 * 4, inPos.get());
+    // The rest of the blocks are compressed, but not the leftover integer.
   }
 
   @Test
