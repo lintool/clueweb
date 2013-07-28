@@ -23,12 +23,17 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 
 import org.apache.hadoop.io.BytesWritable;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.log4j.Logger;
 
 public class VByteDocVector implements DocVector {
+  private static final Logger LOG = Logger.getLogger(VByteDocVector.class);
+
   private int[] termids;
 
-  public VByteDocVector() {}
+  public VByteDocVector() {
+  }
 
   public int[] getTermIds() {
     return termids;
@@ -38,40 +43,72 @@ public class VByteDocVector implements DocVector {
     return termids.length;
   }
 
-  public static void fromBytesWritable(BytesWritable bytes, VByteDocVector doc) {
-    try {
-      ByteArrayInputStream bytesIn = new ByteArrayInputStream(bytes.getBytes());
-      DataInputStream data = new DataInputStream(bytesIn);
-
-      int length = WritableUtils.readVInt(data);
-      doc.termids = new int[length];
-      for (int i = 0; i < length; i++) {
-        doc.termids[i] = WritableUtils.readVInt(data);
-      }
-    } catch (IOException e) {
-      doc.termids = new int[0];
+  public static class Compressor implements DocVectorCompressor {
+    private static final BytesWritable EMPTY = new BytesWritable();
+    static {
+      EMPTY.set(new byte[] { 0 }, 0, 1);
     }
-  }
 
-  public static void toBytesWritable(BytesWritable bytes, int[] termids, int length) {
-    try {
-      if (termids == null) {
-        termids = new int[] {};
-        length = 0;
+    @Override
+    public void decompress(Writable writable, DocVector docvector) {
+      BytesWritable bytes = (BytesWritable) writable;
+      VByteDocVector doc = (VByteDocVector) docvector;
+      try {
+        ByteArrayInputStream bytesIn = new ByteArrayInputStream(bytes.getBytes());
+        DataInputStream data = new DataInputStream(bytesIn);
+
+        int length = WritableUtils.readVInt(data);
+        doc.termids = new int[length];
+        for (int i = 0; i < length; i++) {
+          doc.termids[i] = WritableUtils.readVInt(data);
+        }
+      } catch (IOException e) {
+        e.printStackTrace();
+        LOG.error("Error compressing document vector!");
+        doc.termids = new int[0];
       }
+    }
 
-      ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
-      DataOutputStream dataOut = new DataOutputStream(bytesOut);
 
-      WritableUtils.writeVInt(dataOut, length);
-      for (int i = 0; i < length; i++) {
-        WritableUtils.writeVInt(dataOut, termids[i]);
+    @Override
+    public void compress(Writable writable, int[] termids, int length) {
+      BytesWritable bytes = (BytesWritable) writable;
+      try {
+        if (termids == null) {
+          termids = new int[] {};
+          length = 0;
+        }
+
+        ByteArrayOutputStream bytesOut = new ByteArrayOutputStream();
+        DataOutputStream dataOut = new DataOutputStream(bytesOut);
+
+        WritableUtils.writeVInt(dataOut, length);
+        for (int i = 0; i < length; i++) {
+          WritableUtils.writeVInt(dataOut, termids[i]);
+        }
+
+        byte[] raw = bytesOut.toByteArray();
+        bytes.set(raw, 0, raw.length);
+      } catch (IOException e) {
+        e.printStackTrace();
+        LOG.error("Error decompressing document vector!");
+        bytes.set(new byte[] {}, 0, 0);
       }
+    }
 
-      byte[] raw = bytesOut.toByteArray();
-      bytes.set(raw, 0, raw.length);
-    } catch (IOException e) {
-      bytes.set(new byte[] {}, 0, 0);
+    @Override
+    public Writable emptyDocVector() {
+      return EMPTY;
+    }
+
+    @Override
+    public Class<? extends Writable> getCompressedClass() {
+      return BytesWritable.class;
+    }
+
+    @Override
+    public DocVector createDocVector() {
+      return new VByteDocVector();
     }
   }
 }

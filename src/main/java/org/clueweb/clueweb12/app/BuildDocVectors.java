@@ -30,9 +30,9 @@ import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -44,30 +44,32 @@ import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
-import org.clueweb.data.VByteDocVector;
+import org.clueweb.data.DocVectorCompressor;
+import org.clueweb.data.DocVectorCompressorFactory;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
 import org.jsoup.Jsoup;
 
+import tl.lin.data.array.IntArrayWritable;
 import tl.lin.lucene.AnalyzerUtils;
 
-public class BuildVByteDocVectors extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(BuildVByteDocVectors.class);
+public class BuildDocVectors extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(BuildDocVectors.class);
 
   private static enum Records {
     TOTAL, PAGES, ERRORS, TOO_LONG
   };
 
-  private static Analyzer ANALYZER;
-
-  private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
-
   private static class MyMapper extends
-      Mapper<LongWritable, ClueWeb12WarcRecord, Text, BytesWritable> {
-    private static final Text DOCID = new Text();
-    private static final BytesWritable DOC = new BytesWritable();
+      Mapper<LongWritable, ClueWeb12WarcRecord, Text, Writable> {
+    private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
 
+    private static final Text DOCID = new Text();
+    private static final IntArrayWritable DOC = new IntArrayWritable();
+
+    private Analyzer analyzer;
     private DefaultFrequencySortedDictionary dictionary;
+    private DocVectorCompressor compressor;
 
     @Override
     public void setup(Context context) throws IOException {
@@ -76,10 +78,15 @@ public class BuildVByteDocVectors extends Configured implements Tool {
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
 
       String analyzerType = context.getConfiguration().get(PREPROCESSING);
-      ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
-      if (ANALYZER == null) {
-        LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
-        System.exit(1);
+      analyzer = AnalyzerFactory.getAnalyzer(analyzerType);
+      if (analyzer == null) {
+        throw new RuntimeException("Error: proprocessing type '" + analyzerType + "' not recognized!");
+      }
+
+      String compressorType = context.getConfiguration().get(DOCVECTOR);
+      compressor = DocVectorCompressorFactory.getCompressor(compressorType);
+      if (compressor == null) {
+        throw new RuntimeException("Error: dovector type '" + compressorType + "' not recognized!");
       }
     }
 
@@ -101,15 +108,14 @@ public class BuildVByteDocVectors extends Configured implements Tool {
           // As an alternative, we might want to consider putting in a timeout, e.g.,
           // http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
           if (content.length() > MAX_DOC_LENGTH) {
-            DOC.set(new byte[] {}, 0, 0); // Clean up possible corrupted data
+            LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
             context.getCounter(Records.TOO_LONG).increment(1);
-            VByteDocVector.toBytesWritable(DOC, new int[] {}, 0);
-            context.write(DOCID, DOC);
+            context.write(DOCID, compressor.emptyDocVector());
             return;
           }
 
           String cleaned = Jsoup.parse(content).text();
-          List<String> tokens = AnalyzerUtils.parse(ANALYZER, cleaned);
+          List<String> tokens = AnalyzerUtils.parse(analyzer, cleaned);
 
           int len = 0;
           int[] termids = new int[tokens.size()];
@@ -121,14 +127,13 @@ public class BuildVByteDocVectors extends Configured implements Tool {
             }
           }
 
-          VByteDocVector.toBytesWritable(DOC, termids, len);
+          compressor.compress(DOC, termids, len);
           context.write(DOCID, DOC);
         } catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
           LOG.info("Error caught processing " + docid);
           context.getCounter(Records.ERRORS).increment(1);
-          VByteDocVector.toBytesWritable(DOC, new int[] {}, 0);
-          context.write(DOCID, DOC);
+          context.write(DOCID, compressor.emptyDocVector());
         }
       }
     }
@@ -139,6 +144,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
   public static final String DICTIONARY_OPTION = "dictionary";
   public static final String REDUCERS_OPTION = "reducers";
   public static final String PREPROCESSING = "preprocessing";
+  public static final String DOCVECTOR = "docvector";
 
   /**
    * Runs this tool.
@@ -157,6 +163,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
         .withDescription("number of reducers").create(REDUCERS_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("string " + DocVectorCompressorFactory.getOptions())
+        .hasArg().withDescription("docvector").create(DOCVECTOR));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -182,15 +190,17 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String docvector = cmdline.hasOption(DOCVECTOR) ? cmdline.getOptionValue(DOCVECTOR) : "pfor";
 
-    Job job = new Job(getConf(), BuildVByteDocVectors.class.getSimpleName() + ":" + input);
-    job.setJarByClass(BuildVByteDocVectors.class);
+    Job job = new Job(getConf(), BuildDocVectors.class.getSimpleName() + ":" + input);
+    job.setJarByClass(BuildDocVectors.class);
 
-    LOG.info("Tool name: " + BuildVByteDocVectors.class.getSimpleName());
+    LOG.info("Tool name: " + BuildDocVectors.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
     LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - docvector: " + docvector);
 
     if (cmdline.hasOption(REDUCERS_OPTION)) {
       int numReducers = Integer.parseInt(cmdline.getOptionValue(REDUCERS_OPTION));
@@ -200,19 +210,21 @@ public class BuildVByteDocVectors extends Configured implements Tool {
       job.setNumReduceTasks(0);
     }
 
+    DocVectorCompressor compressor = DocVectorCompressorFactory.getCompressor(docvector);
     FileInputFormat.setInputPaths(job, input);
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
     job.getConfiguration().set(PREPROCESSING, preprocessing);
+    job.getConfiguration().set(DOCVECTOR, docvector);
 
     job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
     job.setMapOutputKeyClass(Text.class);
-    job.setMapOutputValueClass(BytesWritable.class);
+    job.setMapOutputValueClass(compressor.getCompressedClass());
     job.setOutputKeyClass(Text.class);
-    job.setOutputValueClass(BytesWritable.class);
+    job.setOutputValueClass(compressor.getCompressedClass());
 
     job.setMapperClass(MyMapper.class);
 
@@ -229,8 +241,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + BuildVByteDocVectors.class.getCanonicalName() + " with args "
+    LOG.info("Running " + BuildDocVectors.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new BuildVByteDocVectors(), args);
+    ToolRunner.run(new BuildDocVectors(), args);
   }
 }

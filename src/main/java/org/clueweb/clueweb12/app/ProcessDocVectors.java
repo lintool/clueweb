@@ -31,6 +31,7 @@ import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
@@ -40,38 +41,45 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.clueweb.data.PForDocVector;
+import org.clueweb.data.DocVector;
+import org.clueweb.data.DocVectorCompressor;
+import org.clueweb.data.DocVectorCompressorFactory;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-
-import tl.lin.data.array.IntArrayWritable;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 
-public class ProcessPForDocVectors extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(ProcessPForDocVectors.class);
+public class ProcessDocVectors extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(ProcessDocVectors.class);
 
-  private static final Joiner JOINER = Joiner.on("|");
-
-  private static class MyMapper extends Mapper<Text, IntArrayWritable, Text, Text> {
-    private static final PForDocVector DOC = new PForDocVector();
+  private static class MyMapper extends Mapper<Text, Writable, Text, Text> {
+    private static final Joiner JOINER = Joiner.on("|");
 
     private DefaultFrequencySortedDictionary dictionary;
+    private DocVectorCompressor compressor;
+    private DocVector doc;
 
     @Override
     public void setup(Context context) throws IOException {
       FileSystem fs = FileSystem.get(context.getConfiguration());
       String path = context.getConfiguration().get(DICTIONARY_OPTION);
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
+
+      String compressorType = context.getConfiguration().get(DOCVECTOR);
+      compressor = DocVectorCompressorFactory.getCompressor(compressorType);
+      if (compressor == null) {
+        throw new RuntimeException("Error: docvector type '" + compressorType + "' not recognized!");
+      }
+      doc = compressor.createDocVector();
     }
 
     @Override
-    public void map(Text key, IntArrayWritable ints, Context context)
+    public void map(Text key, Writable writable, Context context)
         throws IOException, InterruptedException {
-      PForDocVector.fromIntArrayWritable(ints, DOC);
+      compressor.decompress(writable, doc);
 
       List<String> terms = Lists.newArrayList();
-      for (int termid : DOC.getTermIds()) {
+      for (int termid : doc.getTermIds()) {
         terms.add(dictionary.getTerm(termid));
       }
 
@@ -82,6 +90,7 @@ public class ProcessPForDocVectors extends Configured implements Tool {
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
   public static final String DICTIONARY_OPTION = "dictionary";
+  public static final String DOCVECTOR = "docvector";
 
   /**
    * Runs this tool.
@@ -96,6 +105,8 @@ public class ProcessPForDocVectors extends Configured implements Tool {
         .withDescription("output path").create(OUTPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("string " + DocVectorCompressorFactory.getOptions())
+        .hasArg().withDescription("docvector").create(DOCVECTOR));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -120,14 +131,16 @@ public class ProcessPForDocVectors extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+    String docvector = cmdline.hasOption(DOCVECTOR) ? cmdline.getOptionValue(DOCVECTOR) : "pfor";
 
-    LOG.info("Tool name: " + ProcessPForDocVectors.class.getSimpleName());
+    LOG.info("Tool name: " + ProcessDocVectors.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
+    LOG.info(" - docvector: " + docvector);
 
-    Job job = new Job(getConf(), ProcessPForDocVectors.class.getSimpleName() + ":" + input);
-    job.setJarByClass(ProcessPForDocVectors.class);
+    Job job = new Job(getConf(), ProcessDocVectors.class.getSimpleName() + ":" + input);
+    job.setJarByClass(ProcessDocVectors.class);
 
     job.setNumReduceTasks(0);
 
@@ -135,6 +148,7 @@ public class ProcessPForDocVectors extends Configured implements Tool {
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
+    job.getConfiguration().set(DOCVECTOR, docvector);
 
     job.setInputFormatClass(SequenceFileInputFormat.class);
     job.setOutputFormatClass(TextOutputFormat.class);
@@ -157,8 +171,8 @@ public class ProcessPForDocVectors extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + ProcessPForDocVectors.class.getCanonicalName() + " with args "
+    LOG.info("Running " + ProcessDocVectors.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new ProcessPForDocVectors(), args);
+    ToolRunner.run(new ProcessDocVectors(), args);
   }
 }

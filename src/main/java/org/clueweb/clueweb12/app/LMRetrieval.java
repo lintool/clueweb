@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +42,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Partitioner;
@@ -54,12 +54,13 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.clueweb.data.PForDocVector;
+import org.clueweb.data.DocVector;
+import org.clueweb.data.DocVectorCompressor;
+import org.clueweb.data.DocVectorCompressorFactory;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
 
-import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
 import tl.lin.lucene.AnalyzerUtils;
@@ -116,7 +117,6 @@ public class LMRetrieval extends Configured implements Tool {
   private static class CustomComparator implements Comparator<PairOfStringFloat> {
     @Override
     public int compare(PairOfStringFloat o1, PairOfStringFloat o2) {
-
       if (o1.getRightElement() == o2.getRightElement()) {
         return 0;
       }
@@ -131,14 +131,12 @@ public class LMRetrieval extends Configured implements Tool {
    * Mapper outKey: (qid,docid), value: probability score
    */
   private static class MyMapper extends
-      Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
+      Mapper<Text, Writable, PairOfIntString, FloatWritable> {
 
-    private static final PForDocVector DOC = new PForDocVector();
     private DefaultFrequencySortedDictionary dictionary;
     private TermStatistics stats;
     private double smoothingParam;
-
-    private static Analyzer ANALYZER;
+    private Analyzer ANALYZER;
 
     /*
      * for quick access store the queries in two hashmaps: 1. key: termid, value: list of queries in
@@ -151,6 +149,9 @@ public class LMRetrieval extends Configured implements Tool {
     private static final PairOfIntString keyOut = new PairOfIntString();
     // value: float; probability score log(P(q|d))
     private static final FloatWritable valueOut = new FloatWritable();
+
+    private DocVectorCompressor compressor;
+    private DocVector doc;
 
     @Override
     public void setup(Context context) throws IOException {
@@ -168,6 +169,13 @@ public class LMRetrieval extends Configured implements Tool {
         LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
         return;
       }
+
+      String compressorType = context.getConfiguration().get(DOCVECTOR_TYPE);
+      compressor = DocVectorCompressorFactory.getCompressor(compressorType);
+      if (compressor == null) {
+        throw new RuntimeException("Error: docvector type '" + compressorType + "' not recognized!");
+      }
+      doc = compressor.createDocVector();
 
       // read the queries from file
       termidQuerySet = Maps.newHashMap();
@@ -214,16 +222,16 @@ public class LMRetrieval extends Configured implements Tool {
     }
 
     @Override
-    public void map(Text key, IntArrayWritable ints, Context context)
+    public void map(Text key, Writable ints, Context context)
         throws IOException, InterruptedException {
-      PForDocVector.fromIntArrayWritable(ints, DOC);
+      compressor.decompress(ints, doc);
 
       // determine which queries we care about for this document
       HashSet<Integer> queriesToDo = Sets.newHashSet();
 
       // tfMap of the document
-      HashMap<Integer, Integer> tfMap = Maps.newHashMap();
-      for (int termid : DOC.getTermIds()) {
+      Map<Integer, Integer> tfMap = Maps.newHashMap();
+      for (int termid : doc.getTermIds()) {
         int tf = 1;
         if (tfMap.containsKey(termid))
           tf += tfMap.get(termid);
@@ -246,7 +254,7 @@ public class LMRetrieval extends Configured implements Tool {
             tf = tfMap.get(termid);
           double df = stats.getDf(termid);
 
-          double mlProb = tf / (double) DOC.getLength();
+          double mlProb = tf / (double) doc.getLength();
           double colProb = df / (double) stats.getCollectionSize();
 
           double prob = 0.0;
@@ -258,7 +266,7 @@ public class LMRetrieval extends Configured implements Tool {
           // Dirichlet smoothing
           else {
             prob = (double) (tf + smoothingParam * colProb)
-                / (double) (DOC.getLength() + smoothingParam);
+                / (double) (doc.getLength() + smoothingParam);
           }
 
           score += (float) Math.log(prob);
@@ -342,13 +350,14 @@ public class LMRetrieval extends Configured implements Tool {
     }
   }
 
-  public static final String DOCVECTOR_OPTION = "docvector";
+  public static final String DOCVECTOR_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
   public static final String DICTIONARY_OPTION = "dictionary";
   public static final String QUERIES_OPTION = "queries";
   public static final String SMOOTHING = "smoothing";
   public static final String TOPK = "topk";
   public static final String PREPROCESSING = "preprocessing";
+  public static final String DOCVECTOR_TYPE = "docvector";
 
   /**
    * Runs this tool.
@@ -358,8 +367,7 @@ public class LMRetrieval extends Configured implements Tool {
     Options options = new Options();
 
     options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path (pfor format expected, add * to retrieve files)")
-        .create(DOCVECTOR_OPTION));
+        .withDescription("input path").create(DOCVECTOR_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("output path").create(OUTPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
@@ -372,6 +380,8 @@ public class LMRetrieval extends Configured implements Tool {
         .withDescription("topk").create(TOPK));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("string " + DocVectorCompressorFactory.getOptions())
+        .hasArg().withDescription("docvector").create(DOCVECTOR_TYPE));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -402,15 +412,18 @@ public class LMRetrieval extends Configured implements Tool {
     String smoothing = cmdline.getOptionValue(SMOOTHING);
     String topk = cmdline.getOptionValue(TOPK);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String docvectorType = cmdline.hasOption(DOCVECTOR_TYPE) ?
+        cmdline.getOptionValue(DOCVECTOR_TYPE) : "pfor";
 
     LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
-    LOG.info(" - docvector: " + docvector);
+    LOG.info(" - input: " + docvector);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
     LOG.info(" - queries: " + queries);
     LOG.info(" - smoothing: " + smoothing);
     LOG.info(" - topk: " + topk);
     LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - docvector: " + docvectorType);
 
     Configuration conf = getConf();
     conf.set(DICTIONARY_OPTION, dictionary);
@@ -418,6 +431,7 @@ public class LMRetrieval extends Configured implements Tool {
     conf.setFloat(SMOOTHING, Float.parseFloat(smoothing));
     conf.setInt(TOPK, Integer.parseInt(topk));
     conf.set(PREPROCESSING, preprocessing);
+    conf.set(DOCVECTOR_TYPE, docvector);
 
     conf.set("mapreduce.map.memory.mb", "10048");
     conf.set("mapreduce.map.java.opts", "-Xmx10048m");

@@ -31,6 +31,7 @@ import tl.lin.data.array.IntArrayWritable;
 
 public class PForDocVectorTest {
   private static final Random RANDOM = new Random();
+  private static final PForDocVector.Compressor COMPRESSOR = new PForDocVector.Compressor(); 
 
   @Test
   public void testPFor1() throws Exception {
@@ -158,10 +159,10 @@ public class PForDocVectorTest {
     }
 
     IntArrayWritable ints = new IntArrayWritable();
-    PForDocVector.toIntArrayWritable(ints, doc, doclength);
+    COMPRESSOR.compress(ints, doc, doclength);
 
     PForDocVector v = new PForDocVector();
-    PForDocVector.fromIntArrayWritable(ints, v);
+    COMPRESSOR.decompress(ints, v);
 
     assertEquals(doclength, v.getLength());
     for (int i = 0; i < doc.length; i++) {
@@ -193,10 +194,10 @@ public class PForDocVectorTest {
     }
 
     IntArrayWritable ints = new IntArrayWritable();
-    PForDocVector.toIntArrayWritable(ints, doc, doclength);
+    COMPRESSOR.compress(ints, doc, doclength);
 
     PForDocVector v = new PForDocVector();
-    PForDocVector.fromIntArrayWritable(ints, v);
+    COMPRESSOR.decompress(ints, v);
 
     assertEquals(doclength, v.getLength());
     for (int i = 0; i < doclength; i++) {
@@ -208,10 +209,10 @@ public class PForDocVectorTest {
   @Test
   public void testSerializeEmpty1() throws Exception {
     IntArrayWritable ints = new IntArrayWritable();
-    PForDocVector.toIntArrayWritable(ints, new int[] {}, 0);
+    COMPRESSOR.compress(ints, new int[] {}, 0);
 
     PForDocVector v = new PForDocVector();
-    PForDocVector.fromIntArrayWritable(ints, v);
+    COMPRESSOR.decompress(ints, v);
 
     assertEquals(0, v.getLength());
     assertEquals(0, v.getTermIds().length);
@@ -221,10 +222,20 @@ public class PForDocVectorTest {
   @Test
   public void testSerializeEmpty2() throws Exception {
     IntArrayWritable ints = new IntArrayWritable();
-    PForDocVector.toIntArrayWritable(ints, null, -1);
+    COMPRESSOR.compress(ints, null, -1);
 
     PForDocVector v = new PForDocVector();
-    PForDocVector.fromIntArrayWritable(ints, v);
+    COMPRESSOR.decompress(ints, v);
+
+    assertEquals(0, v.getLength());
+    assertEquals(0, v.getTermIds().length);
+  }
+
+  // Make sure deserializing the empty document works.
+  @Test
+  public void testDeserializeEmpty() throws Exception {
+    PForDocVector v = new PForDocVector();
+    COMPRESSOR.decompress(COMPRESSOR.emptyDocVector(), v);
 
     assertEquals(0, v.getLength());
     assertEquals(0, v.getTermIds().length);

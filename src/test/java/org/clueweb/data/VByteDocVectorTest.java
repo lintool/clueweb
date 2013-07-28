@@ -27,6 +27,7 @@ import org.junit.Test;
 
 public class VByteDocVectorTest {
   private static final Random RANDOM = new Random();
+  private static final VByteDocVector.Compressor COMPRESSOR = new VByteDocVector.Compressor(); 
 
   @Test
   public void testSerialize1() throws Exception {
@@ -36,10 +37,10 @@ public class VByteDocVectorTest {
     }
 
     BytesWritable bytes = new BytesWritable();
-    VByteDocVector.toBytesWritable(bytes, doc, 256);
+    COMPRESSOR.compress(bytes, doc, 256);
 
     VByteDocVector v = new VByteDocVector();
-    VByteDocVector.fromBytesWritable(bytes, v);
+    COMPRESSOR.decompress(bytes, v);
 
     assertEquals(doc.length, v.getLength());
     for (int i = 0; i < doc.length; i++) {
@@ -51,10 +52,10 @@ public class VByteDocVectorTest {
   @Test
   public void testSerialize2() throws Exception {
     BytesWritable bytes = new BytesWritable();
-    VByteDocVector.toBytesWritable(bytes,new int[] {}, 0);
+    COMPRESSOR.compress(bytes, new int[] {}, 0);
 
     VByteDocVector v = new VByteDocVector();
-    VByteDocVector.fromBytesWritable(bytes, v);
+    COMPRESSOR.decompress(bytes, v);
 
     assertEquals(0, v.getLength());
     assertEquals(0, v.getTermIds().length);
@@ -64,10 +65,20 @@ public class VByteDocVectorTest {
   @Test
   public void testSerialize3() throws Exception {
     BytesWritable bytes = new BytesWritable();
-    VByteDocVector.toBytesWritable(bytes,new int[] {}, 0);
+    COMPRESSOR.compress(bytes, new int[] {}, 0);
 
     VByteDocVector v = new VByteDocVector();
-    VByteDocVector.fromBytesWritable(bytes, v);
+    COMPRESSOR.decompress(bytes, v);
+
+    assertEquals(0, v.getLength());
+    assertEquals(0, v.getTermIds().length);
+  }
+
+  // Make sure deserializing the empty document works.
+  @Test
+  public void testDeserializeEmpty() throws Exception {
+    VByteDocVector v = new VByteDocVector();
+    COMPRESSOR.decompress(COMPRESSOR.emptyDocVector(), v);
 
     assertEquals(0, v.getLength());
     assertEquals(0, v.getTermIds().length);
