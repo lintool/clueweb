@@ -43,155 +43,145 @@ import org.apache.log4j.Logger;
 import tl.lin.data.pair.PairOfIntLong;
 
 public class MergeTermStatistics extends Configured implements Tool {
-	private static final Logger LOG = Logger
-			.getLogger(MergeTermStatistics.class);
+  private static final Logger LOG = Logger.getLogger(MergeTermStatistics.class);
 
-	private static final String HADOOP_DF_MIN_OPTION = "df.min";
-	private static final String HADOOP_DF_MAX_OPTION = "df.max";
+  private static final String HADOOP_DF_MIN_OPTION = "df.min";
+  private static final String HADOOP_DF_MAX_OPTION = "df.max";
 
-	private static final int MIN_DF_DEFAULT = 100; // Throw away terms with df
-													// less than this.
+  private static final int MIN_DF_DEFAULT = 100; // Throw away terms with df
 
-	private static class MyCombiner extends
-			Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
-		private static final PairOfIntLong output = new PairOfIntLong();
+  // less than this.
 
-		@Override
-		public void reduce(Text key, Iterable<PairOfIntLong> values,
-				Context context) throws IOException, InterruptedException {
-			int df = 0;
-			long cf = 0;
-			for (PairOfIntLong pair : values) {
-				df += pair.getLeftElement();
-				cf += pair.getRightElement();
-			}
+  private static class MyCombiner extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
+    private static final PairOfIntLong output = new PairOfIntLong();
 
-			output.set(df, cf);
-			context.write(key, output);
-		}
-	}
+    @Override
+    public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
+        throws IOException, InterruptedException {
+      int df = 0;
+      long cf = 0;
+      for (PairOfIntLong pair : values) {
+        df += pair.getLeftElement();
+        cf += pair.getRightElement();
+      }
 
-	private static class MyReducer extends
-			Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
-		private static final PairOfIntLong output = new PairOfIntLong();
-		private int dfMin, dfMax;
+      output.set(df, cf);
+      context.write(key, output);
+    }
+  }
 
-		@Override
-		public void setup(
-				Reducer<Text, PairOfIntLong, Text, PairOfIntLong>.Context context) {
-			dfMin = context.getConfiguration().getInt(HADOOP_DF_MIN_OPTION,
-					MIN_DF_DEFAULT);
-			dfMax = context.getConfiguration().getInt(HADOOP_DF_MAX_OPTION,
-					Integer.MAX_VALUE);
-			LOG.info("dfMin = " + dfMin);
-		}
+  private static class MyReducer extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
+    private static final PairOfIntLong output = new PairOfIntLong();
+    private int dfMin, dfMax;
 
-		@Override
-		public void reduce(Text key, Iterable<PairOfIntLong> values,
-				Context context) throws IOException, InterruptedException {
-			int df = 0;
-			long cf = 0;
-			for (PairOfIntLong pair : values) {
-				df += pair.getLeftElement();
-				cf += pair.getRightElement();
-			}
-			if (df < dfMin || df > dfMax) {
-				return;
-			}
-			output.set(df, cf);
-			context.write(key, output);
-		}
-	}
+    @Override
+    public void setup(Reducer<Text, PairOfIntLong, Text, PairOfIntLong>.Context context) {
+      dfMin = context.getConfiguration().getInt(HADOOP_DF_MIN_OPTION, MIN_DF_DEFAULT);
+      dfMax = context.getConfiguration().getInt(HADOOP_DF_MAX_OPTION, Integer.MAX_VALUE);
+      LOG.info("dfMin = " + dfMin);
+    }
 
-	public static final String INPUT_OPTION = "input";
-	public static final String OUTPUT_OPTION = "output";
-	public static final String DF_MIN_OPTION = "dfMin";
+    @Override
+    public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
+        throws IOException, InterruptedException {
+      int df = 0;
+      long cf = 0;
+      for (PairOfIntLong pair : values) {
+        df += pair.getLeftElement();
+        cf += pair.getRightElement();
+      }
+      if (df < dfMin || df > dfMax) {
+        return;
+      }
+      output.set(df, cf);
+      context.write(key, output);
+    }
+  }
 
-	/**
-	 * Runs this tool.
-	 */
-	@SuppressWarnings("static-access")
-	public int run(String[] args) throws Exception {
-		Options options = new Options();
+  public static final String INPUT_OPTION = "input";
+  public static final String OUTPUT_OPTION = "output";
+  public static final String DF_MIN_OPTION = "dfMin";
 
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path").create(INPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("output path").create(OUTPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("num").hasArg()
-				.withDescription("minimum df").create(DF_MIN_OPTION));
+  /**
+   * Runs this tool.
+   */
+  @SuppressWarnings("static-access")
+  public int run(String[] args) throws Exception {
+    Options options = new Options();
 
-		CommandLine cmdline;
-		CommandLineParser parser = new GnuParser();
-		try {
-			cmdline = parser.parse(options, args);
-		} catch (ParseException exp) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			System.err.println("Error parsing command line: "
-					+ exp.getMessage());
-			return -1;
-		}
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("minimum df")
+        .create(DF_MIN_OPTION));
 
-		if (!cmdline.hasOption(INPUT_OPTION)
-				|| !cmdline.hasOption(OUTPUT_OPTION)) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			return -1;
-		}
+    CommandLine cmdline;
+    CommandLineParser parser = new GnuParser();
+    try {
+      cmdline = parser.parse(options, args);
+    } catch (ParseException exp) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      System.err.println("Error parsing command line: " + exp.getMessage());
+      return -1;
+    }
 
-		String input = cmdline.getOptionValue(INPUT_OPTION);
-		String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      return -1;
+    }
 
-		LOG.info("Tool name: " + MergeTermStatistics.class.getSimpleName());
-		LOG.info(" - input: " + input);
-		LOG.info(" - output: " + output);
+    String input = cmdline.getOptionValue(INPUT_OPTION);
+    String output = cmdline.getOptionValue(OUTPUT_OPTION);
 
-		Job job = new Job(getConf(), MergeTermStatistics.class.getSimpleName()
-				+ ":" + input);
-		job.setJarByClass(MergeTermStatistics.class);
+    LOG.info("Tool name: " + MergeTermStatistics.class.getSimpleName());
+    LOG.info(" - input: " + input);
+    LOG.info(" - output: " + output);
 
-		job.setNumReduceTasks(1);
+    Job job = new Job(getConf(), MergeTermStatistics.class.getSimpleName() + ":" + input);
+    job.setJarByClass(MergeTermStatistics.class);
 
-		if (cmdline.hasOption(DF_MIN_OPTION)) {
-			int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));
-			LOG.info(" - dfMin: " + dfMin);
-			job.getConfiguration().setInt(HADOOP_DF_MIN_OPTION, dfMin);
-		}
+    job.setNumReduceTasks(1);
 
-		FileInputFormat.setInputPaths(job, input);
-		FileOutputFormat.setOutputPath(job, new Path(output));
+    if (cmdline.hasOption(DF_MIN_OPTION)) {
+      int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));
+      LOG.info(" - dfMin: " + dfMin);
+      job.getConfiguration().setInt(HADOOP_DF_MIN_OPTION, dfMin);
+    }
 
-		job.setInputFormatClass(SequenceFileInputFormat.class);
-		job.setOutputFormatClass(SequenceFileOutputFormat.class);
+    FileInputFormat.setInputPaths(job, input);
+    FileOutputFormat.setOutputPath(job, new Path(output));
 
-		job.setMapOutputKeyClass(Text.class);
-		job.setMapOutputValueClass(PairOfIntLong.class);
-		job.setOutputKeyClass(Text.class);
-		job.setOutputValueClass(PairOfIntLong.class);
+    job.setInputFormatClass(SequenceFileInputFormat.class);
+    job.setOutputFormatClass(SequenceFileOutputFormat.class);
 
-		job.setCombinerClass(MyCombiner.class);
-		job.setReducerClass(MyReducer.class);
+    job.setMapOutputKeyClass(Text.class);
+    job.setMapOutputValueClass(PairOfIntLong.class);
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(PairOfIntLong.class);
 
-		FileSystem.get(getConf()).delete(new Path(output), true);
+    job.setCombinerClass(MyCombiner.class);
+    job.setReducerClass(MyReducer.class);
 
-		long startTime = System.currentTimeMillis();
-		job.waitForCompletion(true);
-		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
-				/ 1000.0 + " seconds");
+    FileSystem.get(getConf()).delete(new Path(output), true);
 
-		return 0;
-	}
+    long startTime = System.currentTimeMillis();
+    job.waitForCompletion(true);
+    LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
 
-	/**
-	 * Dispatches command-line arguments to the tool via the
-	 * <code>ToolRunner</code>.
-	 */
-	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + MergeTermStatistics.class.getCanonicalName()
-				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new MergeTermStatistics(), args);
-	}
+    return 0;
+  }
+
+  /**
+   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
+   */
+  public static void main(String[] args) throws Exception {
+    LOG.info("Running " + MergeTermStatistics.class.getCanonicalName() + " with args "
+        + Arrays.toString(args));
+    ToolRunner.run(new MergeTermStatistics(), args);
+  }
 }

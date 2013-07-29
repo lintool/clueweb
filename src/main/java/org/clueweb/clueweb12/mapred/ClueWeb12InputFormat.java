@@ -67,92 +67,84 @@ import org.apache.hadoop.mapred.RecordReader;
 import org.apache.hadoop.mapred.Reporter;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 
-public class ClueWeb12InputFormat extends
-		FileInputFormat<LongWritable, ClueWeb12WarcRecord> {
+public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb12WarcRecord> {
 
-	/**
-	 * Don't allow the files to be split!
-	 */
-	@Override
-	protected boolean isSplitable(FileSystem fs, Path filename) {
-		// ensure the input files are not splittable!
-		return false;
-	}
+  /**
+   * Don't allow the files to be split!
+   */
+  @Override
+  protected boolean isSplitable(FileSystem fs, Path filename) {
+    // ensure the input files are not splittable!
+    return false;
+  }
 
-	/**
-	 * Just return the record reader
-	 */
-	public RecordReader<LongWritable, ClueWeb12WarcRecord> getRecordReader(
-			InputSplit split, JobConf conf, Reporter reporter)
-			throws IOException {
-		return new ClueWarcRecordReader(conf, (FileSplit) split);
-	}
+  /**
+   * Just return the record reader
+   */
+  public RecordReader<LongWritable, ClueWeb12WarcRecord> getRecordReader(InputSplit split,
+      JobConf conf, Reporter reporter) throws IOException {
+    return new ClueWarcRecordReader(conf, (FileSplit) split);
+  }
 
-	public static class ClueWarcRecordReader implements
-			RecordReader<LongWritable, ClueWeb12WarcRecord> {
-		private long recordCount = 1;
-		private Path path = null;
-		private DataInputStream input = null;
+  public static class ClueWarcRecordReader implements
+      RecordReader<LongWritable, ClueWeb12WarcRecord> {
+    private long recordCount = 1;
+    private Path path = null;
+    private DataInputStream input = null;
 
-		private long totalNumBytesRead = 0;
+    private long totalNumBytesRead = 0;
 
-		public ClueWarcRecordReader(Configuration conf, FileSplit split)
-				throws IOException {
-			FileSystem fs = FileSystem.get(conf);
-			path = split.getPath();
+    public ClueWarcRecordReader(Configuration conf, FileSplit split) throws IOException {
+      FileSystem fs = FileSystem.get(conf);
+      path = split.getPath();
 
-			CompressionCodecFactory compressionCodecs = new CompressionCodecFactory(
-					conf);
-			CompressionCodec compressionCodec = compressionCodecs
-					.getCodec(path);
-			input = new DataInputStream(compressionCodec.createInputStream(fs
-					.open(path)));
-		}
+      CompressionCodecFactory compressionCodecs = new CompressionCodecFactory(conf);
+      CompressionCodec compressionCodec = compressionCodecs.getCodec(path);
+      input = new DataInputStream(compressionCodec.createInputStream(fs.open(path)));
+    }
 
-		@Override
-		public boolean next(LongWritable key, ClueWeb12WarcRecord value)
-				throws IOException {
-			DataInputStream whichStream = input;
+    @Override
+    public boolean next(LongWritable key, ClueWeb12WarcRecord value) throws IOException {
+      DataInputStream whichStream = input;
 
-			ClueWeb12WarcRecord newRecord = ClueWeb12WarcRecord
-					.readNextWarcRecord(whichStream);
-			if (newRecord == null) {
-				return false;
-			}
+      ClueWeb12WarcRecord newRecord = ClueWeb12WarcRecord.readNextWarcRecord(whichStream);
+      if (newRecord == null) {
+        return false;
+      }
 
-			totalNumBytesRead += (long) newRecord.getTotalRecordLength();
-			newRecord.setWarcFilePath(path.toString());
+      totalNumBytesRead += (long) newRecord.getTotalRecordLength();
+      newRecord.setWarcFilePath(path.toString());
 
-			value.set(newRecord);
-			key.set(recordCount);
+      value.set(newRecord);
+      key.set(recordCount);
 
-			recordCount++;
-			return true;
-		}
+      recordCount++;
+      return true;
+    }
 
-		@Override
-		public LongWritable createKey() {
-			return new LongWritable();
-		}
+    @Override
+    public LongWritable createKey() {
+      return new LongWritable();
+    }
 
-		@Override
-		public ClueWeb12WarcRecord createValue() {
-			return new ClueWeb12WarcRecord();
-		}
+    @Override
+    public ClueWeb12WarcRecord createValue() {
+      return new ClueWeb12WarcRecord();
+    }
 
-		@Override
-		public long getPos() throws IOException {
-			return totalNumBytesRead;
-		}
+    @Override
+    public long getPos() throws IOException {
+      return totalNumBytesRead;
+    }
 
-		@Override
-		public void close() throws IOException {
-			input.close();
-		}
+    @Override
+    public void close() throws IOException {
+      input.close();
+    }
 
-		@Override
-		public float getProgress() throws IOException {
-			return (float) recordCount / 40000f;
-		}
-	}
+    @Override
+    public float getProgress() throws IOException {
+      return (float) recordCount / 40000f;
+    }
+  }
 }

@@ -86,374 +86,355 @@ import com.google.common.collect.Sets;
 
 public class DuplicateFiltering extends Configured implements Tool {
 
-	private static final Logger LOG = Logger.getLogger(DuplicateFiltering.class);
-	
-	private static enum Records {
-		DUPLICATES
-	};
+  private static final Logger LOG = Logger.getLogger(DuplicateFiltering.class);
 
-	/*
-	 * we need to emit [termid1 weight1 termid2 weight2 ...] as value in
-	 * MyMapper
-	 */
-	private static class FloatArrayWritable extends ArrayWritable {
-		public FloatArrayWritable() {
-			super(FloatWritable.class);
-		}
+  private static enum Records {
+    DUPLICATES
+  };
 
-		public FloatArrayWritable(FloatWritable[] values) {
-			super(FloatWritable.class, values);
-		}
-	}
+  /*
+   * we need to emit [termid1 weight1 termid2 weight2 ...] as value in MyMapper
+   */
+  private static class FloatArrayWritable extends ArrayWritable {
+    public FloatArrayWritable() {
+      super(FloatWritable.class);
+    }
 
-	/*
-	 * Partitioner: all keys with the same qid go to the same reducer
-	 */
-	private static class MyPartitioner extends
-			Partitioner<PairOfIntString, FloatArrayWritable> {
+    public FloatArrayWritable(FloatWritable[] values) {
+      super(FloatWritable.class, values);
+    }
+  }
 
-		@Override
-		public int getPartition(PairOfIntString arg0, FloatArrayWritable arg1,
-				int numPartitions) {
-			return arg0.getLeftElement() % numPartitions;
-		}
-	}
+  /*
+   * Partitioner: all keys with the same qid go to the same reducer
+   */
+  private static class MyPartitioner extends Partitioner<PairOfIntString, FloatArrayWritable> {
 
-	/*
-	 * Mapper outKey: (qid,result file line), value: term weight array
-	 */
-	private static class MyMapper extends
-			Mapper<Text, IntArrayWritable, PairOfIntString, FloatArrayWritable> {
+    @Override
+    public int getPartition(PairOfIntString arg0, FloatArrayWritable arg1, int numPartitions) {
+      return arg0.getLeftElement() % numPartitions;
+    }
+  }
 
-		private static final PForDocVector DOC = new PForDocVector();
-		private TermStatistics stats;
+  /*
+   * Mapper outKey: (qid,result file line), value: term weight array
+   */
+  private static class MyMapper extends
+      Mapper<Text, IntArrayWritable, PairOfIntString, FloatArrayWritable> {
 
-		// complex key: (qid,result file line)
-		private static final PairOfIntString keyOut = new PairOfIntString();
-		private static final FloatArrayWritable valueOut = new FloatArrayWritable();
+    private static final PForDocVector DOC = new PForDocVector();
+    private TermStatistics stats;
 
-		// key: docid, value: a set of lines in the TREC result file containing
-		// that docid (he same docid can occur in several queries, thus Set as
-		// value)
-		private static final HashMap<String, HashSet<String>> docidResults = Maps
-				.newHashMap();
+    // complex key: (qid,result file line)
+    private static final PairOfIntString keyOut = new PairOfIntString();
+    private static final FloatArrayWritable valueOut = new FloatArrayWritable();
 
-		private double numDocs;
+    // key: docid, value: a set of lines in the TREC result file containing
+    // that docid (he same docid can occur in several queries, thus Set as
+    // value)
+    private static final HashMap<String, HashSet<String>> docidResults = Maps.newHashMap();
 
-		@Override
-		public void setup(Context context) throws IOException {
+    private double numDocs;
 
-			FileSystem fs = FileSystem.get(context.getConfiguration());
-			String path = context.getConfiguration().get(DICTIONARY_OPTION);
-			stats = new TermStatistics(new Path(path), fs);
-			numDocs = stats.getCollectionSize();
+    @Override
+    public void setup(Context context) throws IOException {
 
-			FSDataInputStream fsin = fs.open(new Path(context
-					.getConfiguration().get(TREC_RESULT_FILE)));
-			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-			String line;
-			while ((line = br.readLine()) != null) {
+      FileSystem fs = FileSystem.get(context.getConfiguration());
+      String path = context.getConfiguration().get(DICTIONARY_OPTION);
+      stats = new TermStatistics(new Path(path), fs);
+      numDocs = stats.getCollectionSize();
 
-				String tokens[] = line.split("\\s+");
-				String did = tokens[2];
-				HashSet<String> set = null;
-				if (docidResults.containsKey(did))
-					set = docidResults.get(did);
-				else {
-					set = Sets.newHashSet();
-					docidResults.put(did, set);
-				}
-				set.add(line);
-			}
-			br.close();
-			fsin.close();
-			
-		}
+      FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(TREC_RESULT_FILE)));
+      BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
+      String line;
+      while ((line = br.readLine()) != null) {
 
-		@Override
-		public void map(Text key, IntArrayWritable ints, Context context)
-				throws IOException, InterruptedException {
-			
-			// is the document of interest to us?
-			if (!docidResults.containsKey(key.toString())) {
-				return;
-			}
-			
-			PForDocVector.fromIntArrayWritable(ints, DOC);
+        String tokens[] = line.split("\\s+");
+        String did = tokens[2];
+        HashSet<String> set = null;
+        if (docidResults.containsKey(did))
+          set = docidResults.get(did);
+        else {
+          set = Sets.newHashSet();
+          docidResults.put(did, set);
+        }
+        set.add(line);
+      }
+      br.close();
+      fsin.close();
 
-			// tfMap of the document
-			HashMap<Integer, Integer> tfMap = Maps.newHashMap();
-			for (int termid : DOC.getTermIds()) {
-				int tf = 1;
-				if (tfMap.containsKey(termid)) {
-					tf += tfMap.get(termid);
-				}
-				tfMap.put(termid, tf);
-			}
+    }
 
-			// create an array of [termid1 weight1 termid2 weight2 .... ] for
-			// the document
-			FloatWritable[] fw = new FloatWritable[tfMap.size() * 2];
+    @Override
+    public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
+        InterruptedException {
 
-			int index = 0;
-			for (int termid : tfMap.keySet()) {
-				// TF.IDF weights
-				double weight = (double) tfMap.get(termid)
-						* Math.log(numDocs / (double) (stats.getDf(termid)));
-				fw[index++] = new FloatWritable(termid);
-				fw[index++] = new FloatWritable((float) weight);
-			}
+      // is the document of interest to us?
+      if (!docidResults.containsKey(key.toString())) {
+        return;
+      }
 
-			for (String line : docidResults.get(key.toString())) {
-				int qid = Integer.parseInt(line.split("\\s+")[0]);
-				keyOut.set(qid, line);
-				valueOut.set(fw);
-				context.write(keyOut, valueOut);
-			}
+      PForDocVector.fromIntArrayWritable(ints, DOC);
 
-		}
-	}
+      // tfMap of the document
+      HashMap<Integer, Integer> tfMap = Maps.newHashMap();
+      for (int termid : DOC.getTermIds()) {
+        int tf = 1;
+        if (tfMap.containsKey(termid)) {
+          tf += tfMap.get(termid);
+        }
+        tfMap.put(termid, tf);
+      }
 
-	private static class MyReducer extends
-			Reducer<PairOfIntString, FloatArrayWritable, NullWritable, Text> {
+      // create an array of [termid1 weight1 termid2 weight2 .... ] for
+      // the document
+      FloatWritable[] fw = new FloatWritable[tfMap.size() * 2];
 
-		private int topk;
-		private float cosineSimThreshold;
-		private static final NullWritable nullKey = NullWritable.get();
-		private static final Text valueOut = new Text();
-		
-		// outer key: qid, inner key: rank, inner value: term weights of the
-		// document at rank for query
-		private static final HashMap<Integer, HashMap<Integer, HashMap<Integer, Float>>> termWeightsPerQuery = Maps
-				.newHashMap();
-		// key: (qid, rank)
-		private static final HashMap<PairOfInts, String> resultFileLines = Maps
-				.newHashMap();
+      int index = 0;
+      for (int termid : tfMap.keySet()) {
+        // TF.IDF weights
+        double weight = (double) tfMap.get(termid)
+            * Math.log(numDocs / (double) (stats.getDf(termid)));
+        fw[index++] = new FloatWritable(termid);
+        fw[index++] = new FloatWritable((float) weight);
+      }
 
-		public void setup(Context context) throws IOException {
-			
-			cosineSimThreshold = context.getConfiguration().getFloat(SIM_THRESHOLD, 0.9f);
-			if(cosineSimThreshold<0 || cosineSimThreshold>1) {
-				cosineSimThreshold=0.9f;
-			}
-			LOG.info("Cosine similarity threshold set to "+cosineSimThreshold);
-			
-			topk = context.getConfiguration().getInt(TOPK, 1000);
-			LOG.info("Topk set to "+topk);
-		}
+      for (String line : docidResults.get(key.toString())) {
+        int qid = Integer.parseInt(line.split("\\s+")[0]);
+        keyOut.set(qid, line);
+        valueOut.set(fw);
+        context.write(keyOut, valueOut);
+      }
 
-		private double squaredSum(HashMap<Integer, Float> map) {
-			double ssum = 0.0;
-			for (int key : map.keySet()) {
-				ssum += map.get(key) * map.get(key);
-			}
-			return ssum;
-		}
+    }
+  }
 
-		private double computeCosineSim(HashMap<Integer, Float> map1,
-				HashMap<Integer, Float> map2) {
-			double denominator1 = Math.sqrt(squaredSum(map1));
-			double denominator2 = Math.sqrt(squaredSum(map2));
-			double denominator = denominator1 * denominator2;
+  private static class MyReducer extends
+      Reducer<PairOfIntString, FloatArrayWritable, NullWritable, Text> {
 
-			double numerator = 0.0;
-			for (int key1 : map1.keySet()) {
-				if (map2.containsKey(key1)) {
-					numerator += map1.get(key1) * map2.get(key1);
-				}
-			}
-			return (numerator / denominator);
-		}
+    private int topk;
+    private float cosineSimThreshold;
+    private static final NullWritable nullKey = NullWritable.get();
+    private static final Text valueOut = new Text();
 
-		@Override
-		public void reduce(PairOfIntString key,
-				Iterable<FloatArrayWritable> values, Context context)
-				throws IOException, InterruptedException {
+    // outer key: qid, inner key: rank, inner value: term weights of the
+    // document at rank for query
+    private static final HashMap<Integer, HashMap<Integer, HashMap<Integer, Float>>> termWeightsPerQuery = Maps
+        .newHashMap();
+    // key: (qid, rank)
+    private static final HashMap<PairOfInts, String> resultFileLines = Maps.newHashMap();
 
-			String tokens[] = key.getRightElement().split("\\s+");
-			int rank = Integer.parseInt(tokens[3]);
+    public void setup(Context context) throws IOException {
 
-			HashMap<Integer, HashMap<Integer, Float>> termWeights = null;
-			if (termWeightsPerQuery.containsKey(key.getLeftElement())) {
-				termWeights = termWeightsPerQuery.get(key.getLeftElement());
-			} else {
-				termWeights = Maps.newHashMap();
-				termWeightsPerQuery.put(key.getLeftElement(), termWeights);
-			}
+      cosineSimThreshold = context.getConfiguration().getFloat(SIM_THRESHOLD, 0.9f);
+      if (cosineSimThreshold < 0 || cosineSimThreshold > 1) {
+        cosineSimThreshold = 0.9f;
+      }
+      LOG.info("Cosine similarity threshold set to " + cosineSimThreshold);
 
-			resultFileLines.put(new PairOfInts(key.getLeftElement(), rank),
-					key.getRightElement());
+      topk = context.getConfiguration().getInt(TOPK, 1000);
+      LOG.info("Topk set to " + topk);
+    }
 
-			HashMap<Integer, Float> weights = Maps.newHashMap();
-			Writable array[] = values.iterator().next().get();
-			for (int i = 0; i < array.length; i += 2) {
-				int termid = (int) ((FloatWritable) array[i]).get();
-				float weight = ((FloatWritable) array[i + 1]).get();
-				weights.put(termid, weight);
-			}
-			termWeights.put(rank, weights);
+    private double squaredSum(HashMap<Integer, Float> map) {
+      double ssum = 0.0;
+      for (int key : map.keySet()) {
+        ssum += map.get(key) * map.get(key);
+      }
+      return ssum;
+    }
 
-		}
+    private double computeCosineSim(HashMap<Integer, Float> map1, HashMap<Integer, Float> map2) {
+      double denominator1 = Math.sqrt(squaredSum(map1));
+      double denominator2 = Math.sqrt(squaredSum(map2));
+      double denominator = denominator1 * denominator2;
 
-		public void cleanup(Context context) throws IOException,
-				InterruptedException {
+      double numerator = 0.0;
+      for (int key1 : map1.keySet()) {
+        if (map2.containsKey(key1)) {
+          numerator += map1.get(key1) * map2.get(key1);
+        }
+      }
+      return (numerator / denominator);
+    }
 
-			for (int qid : termWeightsPerQuery.keySet()) {
-				HashMap<Integer, HashMap<Integer, Float>> termWeights = termWeightsPerQuery
-						.get(qid);
+    @Override
+    public void reduce(PairOfIntString key, Iterable<FloatArrayWritable> values, Context context)
+        throws IOException, InterruptedException {
 
-				for (int r = 2; r <= topk; r++) {
+      String tokens[] = key.getRightElement().split("\\s+");
+      int rank = Integer.parseInt(tokens[3]);
 
-					if (termWeights.containsKey(r) == false) {
-						continue;
-					}
+      HashMap<Integer, HashMap<Integer, Float>> termWeights = null;
+      if (termWeightsPerQuery.containsKey(key.getLeftElement())) {
+        termWeights = termWeightsPerQuery.get(key.getLeftElement());
+      } else {
+        termWeights = Maps.newHashMap();
+        termWeightsPerQuery.put(key.getLeftElement(), termWeights);
+      }
 
-					for (int s = (r - 1); s >= 1; s--) {
-						if (termWeights.containsKey(s) == false) {
-							continue;
-						}
+      resultFileLines.put(new PairOfInts(key.getLeftElement(), rank), key.getRightElement());
 
-						double sim = computeCosineSim(termWeights.get(r),
-								termWeights.get(s));
+      HashMap<Integer, Float> weights = Maps.newHashMap();
+      Writable array[] = values.iterator().next().get();
+      for (int i = 0; i < array.length; i += 2) {
+        int termid = (int) ((FloatWritable) array[i]).get();
+        float weight = ((FloatWritable) array[i + 1]).get();
+        weights.put(termid, weight);
+      }
+      termWeights.put(rank, weights);
 
-						if (sim >= cosineSimThreshold) {
-							termWeights.remove(r);
-							context.getCounter(Records.DUPLICATES).increment(1);
-							break;
-						}
-					}
-				}
+    }
 
-				// whatever is left is not a duplicate ...
-				for (int r = 1; r <= topk; r++) {
-					if (termWeights.containsKey(r)) {
-						valueOut.set(resultFileLines.get(new PairOfInts(qid, r)));
-						context.write(nullKey, valueOut);
-					}
-				}
-			}
-		}
-	}
+    public void cleanup(Context context) throws IOException, InterruptedException {
 
-	public static final String DOCVECTOR_OPTION = "docvector";
-	public static final String OUTPUT_OPTION = "output";
-	public static final String DICTIONARY_OPTION = "dictionary";
-	public static final String QUERIES_OPTION = "queries";
-	public static final String TOPK = "topk";
-	public static final String SIM_THRESHOLD = "cosineSimThreshold";
-	public static final String TREC_RESULT_FILE = "trecinputfile";
-	public static final String SPAM_THRESHOLD = "spamThreshold";
-	public static final String SPAM_SCORES_FOLDER = "spamScoreFolder";
+      for (int qid : termWeightsPerQuery.keySet()) {
+        HashMap<Integer, HashMap<Integer, Float>> termWeights = termWeightsPerQuery.get(qid);
 
-	/**
-	 * Runs this tool.
-	 */
-	@SuppressWarnings({ "static-access", "deprecation" })
-	public int run(String[] args) throws Exception {
-		Options options = new Options();
+        for (int r = 2; r <= topk; r++) {
 
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path (pfor format expected, add * to retrieve files)")
-				.create(DOCVECTOR_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path").create(TREC_RESULT_FILE));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("output path").create(OUTPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("dictionary").create(DICTIONARY_OPTION));
-		options.addOption(OptionBuilder.withArgName("int").hasArg()
-				.withDescription("topk").create(TOPK));
-		options.addOption(OptionBuilder.withArgName("float [0-1]").hasArg()
-				.withDescription("cosine similarity threshold").create(SIM_THRESHOLD));
+          if (termWeights.containsKey(r) == false) {
+            continue;
+          }
 
-		CommandLine cmdline;
-		CommandLineParser parser = new GnuParser();
-		try {
-			cmdline = parser.parse(options, args);
-		} catch (ParseException exp) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			System.err.println("Error parsing command line: "
-					+ exp.getMessage());
-			return -1;
-		}
+          for (int s = (r - 1); s >= 1; s--) {
+            if (termWeights.containsKey(s) == false) {
+              continue;
+            }
 
-		if (!cmdline.hasOption(DOCVECTOR_OPTION)
-				|| !cmdline.hasOption(OUTPUT_OPTION)
-				|| !cmdline.hasOption(DICTIONARY_OPTION)
-				|| !cmdline.hasOption(TREC_RESULT_FILE)
-				|| !cmdline.hasOption(SIM_THRESHOLD)
-				|| !cmdline.hasOption(TOPK)) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			return -1;
-		}
+            double sim = computeCosineSim(termWeights.get(r), termWeights.get(s));
 
-		String docvector = cmdline.getOptionValue(DOCVECTOR_OPTION);
-		String trecinput = cmdline.getOptionValue(TREC_RESULT_FILE);
-		String output = cmdline.getOptionValue(OUTPUT_OPTION);
-		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
-		String simThreshold = cmdline.getOptionValue(SIM_THRESHOLD);
-		String topk = cmdline.getOptionValue(TOPK);
+            if (sim >= cosineSimThreshold) {
+              termWeights.remove(r);
+              context.getCounter(Records.DUPLICATES).increment(1);
+              break;
+            }
+          }
+        }
 
-		LOG.info("Tool name: " + DuplicateFiltering.class.getSimpleName());
-		LOG.info(" - docvector: " + docvector);
-		LOG.info(" - trecinputfile: " + trecinput);
-		LOG.info(" - output: " + output);
-		LOG.info(" - dictionary: " + dictionary);
-		LOG.info(" - cosine similarity threshold: " + SIM_THRESHOLD);
-		LOG.info(" - topk: " + topk);
+        // whatever is left is not a duplicate ...
+        for (int r = 1; r <= topk; r++) {
+          if (termWeights.containsKey(r)) {
+            valueOut.set(resultFileLines.get(new PairOfInts(qid, r)));
+            context.write(nullKey, valueOut);
+          }
+        }
+      }
+    }
+  }
 
-		Configuration conf = getConf();
-		conf.set(DICTIONARY_OPTION, dictionary);
-		conf.setFloat(SIM_THRESHOLD, Float.parseFloat(simThreshold));
-		conf.set(TREC_RESULT_FILE, trecinput);
-		conf.setInt(TOPK, Integer.parseInt(topk));
+  public static final String DOCVECTOR_OPTION = "docvector";
+  public static final String OUTPUT_OPTION = "output";
+  public static final String DICTIONARY_OPTION = "dictionary";
+  public static final String QUERIES_OPTION = "queries";
+  public static final String TOPK = "topk";
+  public static final String SIM_THRESHOLD = "cosineSimThreshold";
+  public static final String TREC_RESULT_FILE = "trecinputfile";
+  public static final String SPAM_THRESHOLD = "spamThreshold";
+  public static final String SPAM_SCORES_FOLDER = "spamScoreFolder";
 
-		conf.set("mapred.task.timeout", "6000000");// default is 600000
+  /**
+   * Runs this tool.
+   */
+  @SuppressWarnings({ "static-access", "deprecation" })
+  public int run(String[] args) throws Exception {
+    Options options = new Options();
 
-		FileSystem fs = FileSystem.get(conf);
-		if (fs.exists(new Path(output)))
-			fs.delete(new Path(output));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("input path (pfor format expected, add * to retrieve files)")
+        .create(DOCVECTOR_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(TREC_RESULT_FILE));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("int").hasArg().withDescription("topk")
+        .create(TOPK));
+    options.addOption(OptionBuilder.withArgName("float [0-1]").hasArg()
+        .withDescription("cosine similarity threshold").create(SIM_THRESHOLD));
 
-		Job job = new Job(conf, DuplicateFiltering.class.getSimpleName() + ":"
-				+ docvector);
-		job.setJarByClass(DuplicateFiltering.class);
+    CommandLine cmdline;
+    CommandLineParser parser = new GnuParser();
+    try {
+      cmdline = parser.parse(options, args);
+    } catch (ParseException exp) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      System.err.println("Error parsing command line: " + exp.getMessage());
+      return -1;
+    }
 
-		FileInputFormat.setInputPaths(job, docvector);
-		FileOutputFormat.setOutputPath(job, new Path(output));
+    if (!cmdline.hasOption(DOCVECTOR_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(TREC_RESULT_FILE)
+        || !cmdline.hasOption(SIM_THRESHOLD) || !cmdline.hasOption(TOPK)) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      return -1;
+    }
 
-		job.setInputFormatClass(SequenceFileInputFormat.class);
+    String docvector = cmdline.getOptionValue(DOCVECTOR_OPTION);
+    String trecinput = cmdline.getOptionValue(TREC_RESULT_FILE);
+    String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+    String simThreshold = cmdline.getOptionValue(SIM_THRESHOLD);
+    String topk = cmdline.getOptionValue(TOPK);
 
-		job.setMapOutputKeyClass(PairOfIntString.class);
-		job.setMapOutputValueClass(FloatArrayWritable.class);
-		job.setOutputKeyClass(NullWritable.class);
-		job.setOutputValueClass(Text.class);
+    LOG.info("Tool name: " + DuplicateFiltering.class.getSimpleName());
+    LOG.info(" - docvector: " + docvector);
+    LOG.info(" - trecinputfile: " + trecinput);
+    LOG.info(" - output: " + output);
+    LOG.info(" - dictionary: " + dictionary);
+    LOG.info(" - cosine similarity threshold: " + SIM_THRESHOLD);
+    LOG.info(" - topk: " + topk);
 
-		job.setMapperClass(MyMapper.class);
-		job.setPartitionerClass(MyPartitioner.class);
-		job.setReducerClass(MyReducer.class);
+    Configuration conf = getConf();
+    conf.set(DICTIONARY_OPTION, dictionary);
+    conf.setFloat(SIM_THRESHOLD, Float.parseFloat(simThreshold));
+    conf.set(TREC_RESULT_FILE, trecinput);
+    conf.setInt(TOPK, Integer.parseInt(topk));
 
-		long startTime = System.currentTimeMillis();
-		job.waitForCompletion(true);
-		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
-				/ 1000.0 + " seconds");
-		
-		int numDuplicates = (int) job.getCounters().findCounter(Records.DUPLICATES).getValue();
-		LOG.info("Number of duplicates: "+numDuplicates);
+    conf.set("mapred.task.timeout", "6000000");// default is 600000
 
-		return 0;
-	}
+    FileSystem fs = FileSystem.get(conf);
+    if (fs.exists(new Path(output)))
+      fs.delete(new Path(output));
 
-	/**
-	 * Dispatches command-line arguments to the tool via the
-	 * <code>ToolRunner</code>.
-	 */
-	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + DuplicateFiltering.class.getCanonicalName()
-				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new DuplicateFiltering(), args);
-	}
+    Job job = new Job(conf, DuplicateFiltering.class.getSimpleName() + ":" + docvector);
+    job.setJarByClass(DuplicateFiltering.class);
+
+    FileInputFormat.setInputPaths(job, docvector);
+    FileOutputFormat.setOutputPath(job, new Path(output));
+
+    job.setInputFormatClass(SequenceFileInputFormat.class);
+
+    job.setMapOutputKeyClass(PairOfIntString.class);
+    job.setMapOutputValueClass(FloatArrayWritable.class);
+    job.setOutputKeyClass(NullWritable.class);
+    job.setOutputValueClass(Text.class);
+
+    job.setMapperClass(MyMapper.class);
+    job.setPartitionerClass(MyPartitioner.class);
+    job.setReducerClass(MyReducer.class);
+
+    long startTime = System.currentTimeMillis();
+    job.waitForCompletion(true);
+    LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
+
+    int numDuplicates = (int) job.getCounters().findCounter(Records.DUPLICATES).getValue();
+    LOG.info("Number of duplicates: " + numDuplicates);
+
+    return 0;
+  }
+
+  /**
+   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
+   */
+  public static void main(String[] args) throws Exception {
+    LOG.info("Running " + DuplicateFiltering.class.getCanonicalName() + " with args "
+        + Arrays.toString(args));
+    ToolRunner.run(new DuplicateFiltering(), args);
+  }
 }
