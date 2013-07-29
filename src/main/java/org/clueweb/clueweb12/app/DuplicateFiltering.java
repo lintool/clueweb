@@ -40,7 +40,6 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -76,6 +75,8 @@ import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
+import org.clueweb.util.TRECResult;
+import org.clueweb.util.TRECResultFileParser;
 
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
@@ -148,26 +149,19 @@ public class DuplicateFiltering extends Configured implements Tool {
 			stats = new TermStatistics(new Path(path), fs);
 			numDocs = stats.getCollectionSize();
 
-			FSDataInputStream fsin = fs.open(new Path(context
+			TRECResultFileParser parser = new TRECResultFileParser(fs, new Path(context
 					.getConfiguration().get(TREC_RESULT_FILE)));
-			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-			String line;
-			while ((line = br.readLine()) != null) {
-
-				String tokens[] = line.split("\\s+");
-				String did = tokens[2];
+			while(parser.hasNext()) {
+				TRECResult tr = parser.getNext();
 				HashSet<String> set = null;
-				if (docidResults.containsKey(did))
-					set = docidResults.get(did);
+				if (docidResults.containsKey(tr.did))
+					set = docidResults.get(tr.did);
 				else {
 					set = Sets.newHashSet();
-					docidResults.put(did, set);
+					docidResults.put(tr.did, set);
 				}
-				set.add(line);
+				set.add(tr.record);
 			}
-			br.close();
-			fsin.close();
-			
 		}
 
 		@Override

@@ -30,11 +30,11 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -60,6 +60,8 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
+import org.clueweb.util.TRECResult;
+import org.clueweb.util.TRECResultFileParser;
 
 import tl.lin.data.pair.PairOfInts;
 
@@ -88,16 +90,12 @@ public class SpamScoreFiltering extends Configured implements Tool {
 					70);
 			LOG.info("spam threshold set to " + spamThreshold);
 
-			FSDataInputStream fsin = fs.open(new Path(context
+			TRECResultFileParser parser = new TRECResultFileParser(fs, new Path(context
 					.getConfiguration().get(TREC_RESULT_FILE)));
-			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-			String line;
-			while ((line = br.readLine()) != null) {
-				String tokens[] = line.split("\\s+");
-				docids.put(tokens[2], 0);
+			while(parser.hasNext()) {
+				TRECResult tr = parser.getNext();
+				docids.put(tr.did, 0);
 			}
-			fsin.close();
-			br.close();
 		}
 
 		@Override
