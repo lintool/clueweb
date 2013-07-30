@@ -328,6 +328,13 @@ public class RMModel extends Configured implements Tool {
 		conf.set(TREC_RESULT_FILE, trecinput);
 		conf.setInt(NUM_FEEDBACK_DOCS, numDocs);
 		conf.setInt(NUM_FEEDBACK_TERMS, numTerms);
+		
+    conf.set("mapreduce.map.memory.mb", "10048");
+    conf.set("mapreduce.map.java.opts", "-Xmx10048m");
+    conf.set("mapreduce.reduce.memory.mb", "10048");
+    conf.set("mapreduce.reduce.java.opts", "-Xmx10048m");
+    conf.set("mapred.task.timeout", "6000000");// default is 600000
+
 
 		FileSystem fs = FileSystem.get(conf);
 		if (fs.exists(new Path(output)))
@@ -341,8 +348,8 @@ public class RMModel extends Configured implements Tool {
 
 		job.setInputFormatClass(SequenceFileInputFormat.class);
 
-		job.setMapOutputKeyClass(PairOfIntString.class);
-		job.setMapOutputValueClass(FloatWritable.class);
+		job.setMapOutputKeyClass(IntWritable.class);
+		job.setMapOutputValueClass(PairOfStringFloat.class);
 		job.setOutputKeyClass(NullWritable.class);
 		job.setOutputValueClass(Text.class);
 
