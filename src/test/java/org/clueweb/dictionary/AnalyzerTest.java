@@ -35,8 +35,10 @@ public class AnalyzerTest {
   @Test
   public void test1() throws Exception {
     Analyzer analyzer = new PorterAnalyzer();
-    List<String> tokens = AnalyzerUtils.parse(analyzer,
-        "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
+    List<String> tokens = AnalyzerUtils
+        .parse(
+            analyzer,
+            "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
 
     System.out.println(Joiner.on(",").join(tokens));
     assertEquals(19, tokens.size());
@@ -45,8 +47,10 @@ public class AnalyzerTest {
   @Test
   public void test2() throws Exception {
     Analyzer analyzer = new KrovetzAnalyzer();
-    List<String> tokens = AnalyzerUtils.parse(analyzer,
-        "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
+    List<String> tokens = AnalyzerUtils
+        .parse(
+            analyzer,
+            "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
 
     System.out.println(Joiner.on(",").join(tokens));
     assertEquals(19, tokens.size());
@@ -55,8 +59,10 @@ public class AnalyzerTest {
   @Test
   public void test3() throws Exception {
     Analyzer analyzer = new StandardAnalyzer(Version.LUCENE_43);
-    List<String> tokens = AnalyzerUtils.parse(analyzer,
-        "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
+    List<String> tokens = AnalyzerUtils
+        .parse(
+            analyzer,
+            "The U.S. Dept. of Justice has announced that Panasonic and its subsidiary Sanyo have been fined $56.5 million for their roles in price fixing conspiracies involving battery cells and car parts.");
 
     System.out.println(Joiner.on(",").join(tokens));
     assertEquals(23, tokens.size());
