@@ -31,20 +31,11 @@
 
 package org.clueweb.clueweb12.app;
 
-import java.io.BufferedReader;
-
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.Set;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -54,7 +45,6 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
-import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.FloatWritable;
@@ -63,7 +53,6 @@ import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Partitioner;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
@@ -71,47 +60,19 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.data.PForDocVector;
-import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.dictionary.PorterAnalyzer;
-import org.clueweb.util.AnalyzerFactory;
 import org.clueweb.util.TRECResult;
 import org.clueweb.util.TRECResultFileParser;
 
 import tl.lin.data.array.IntArrayWritable;
-import tl.lin.data.pair.PairOfIntFloat;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
-import tl.lin.lucene.AnalyzerUtils;
-
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 public class RMModel extends Configured implements Tool {
 
 	private static final Logger LOG = Logger.getLogger(RMModel.class);
-
-	/*
-	 * comparator for the priority queue: elements (docid,score) are sorted by
-	 * score
-	 */
-	private static class CustomComparator implements
-			Comparator<PairOfStringFloat> {
-		@Override
-		public int compare(PairOfStringFloat o1, PairOfStringFloat o2) {
-
-			if (o1.getRightElement() == o2.getRightElement()) {
-				return 0;
-			}
-			if (o1.getRightElement() > o2.getRightElement()) {
-				return 1;
-			}
-			return -1;
-		}
-	}
 
 	/*
 	 * Mapper outKey: (qid,docid), value: probability score
@@ -283,6 +244,9 @@ public class RMModel extends Configured implements Tool {
 				PairOfStringFloat p = queue.remove();
 				sb.append(p.getLeftElement() + " " + p.getRightElement());
 			}
+			
+			valueOut.set(sb.toString());
+			context.write(nullKey, valueOut);
 		}
 	}
 
@@ -316,8 +280,6 @@ public class RMModel extends Configured implements Tool {
 				.withDescription("numFeedbackTerms").create(NUM_FEEDBACK_TERMS));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("input path").create(TREC_RESULT_FILE));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("dictionary").create(DICTIONARY_OPTION));
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();

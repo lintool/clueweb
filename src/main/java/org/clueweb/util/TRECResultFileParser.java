@@ -37,6 +37,10 @@ public class TRECResultFileParser {
 	private String line;
 	private boolean hasNext;
 	
+	//assumption is that for each query, the docids are ordered in descending order of scores
+	private int currentQuery;
+	private double currentScore;
+	
 	public boolean hasNext() throws IOException {
 		if( (line=br.readLine())!=null) {
 			hasNext = true;
@@ -53,7 +57,23 @@ public class TRECResultFileParser {
 		}
 		
 		String tokens[] = line.split("\\s+");
-		return new TRECResult(Integer.parseInt(tokens[0]), tokens[2], Integer.parseInt(tokens[3]), Double.parseDouble(tokens[4]), line);
+		
+		int qid = Integer.parseInt(tokens[0]);
+		double score = Double.parseDouble(tokens[4]);
+		
+		//is the result file in the order we expect?
+		if(qid == currentQuery) {
+		  if(score>currentScore) {
+		    throw new Error("TREC result file is expected to be in order of descending ranking scores!");
+		  }
+		  currentScore = score;
+		}
+		else {
+		  currentQuery = qid;
+		  currentScore = score;
+		}
+		
+		return new TRECResult(qid, tokens[2], Integer.parseInt(tokens[3]), score, line);
 	}
 	
 	public TRECResultFileParser(FileSystem fs, Path p) throws IOException {
