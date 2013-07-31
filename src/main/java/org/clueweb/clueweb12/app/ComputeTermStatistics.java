@@ -45,6 +45,7 @@ import org.apache.lucene.analysis.Analyzer;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.HTMLParserFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.pair.PairOfIntLong;
@@ -60,6 +61,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
   };
 
   private static Analyzer ANALYZER;
+  private static String htmlParser;
 
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
@@ -77,6 +79,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
     public void setup(Context context) throws IOException {
 
       String analyzerType = context.getConfiguration().get(PREPROCESSING);
+      htmlParser = context.getConfiguration().get(HTML_PARSER);
       ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
       if (ANALYZER == null) {
         LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
@@ -106,7 +109,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
             return;
           }
 
-          String cleaned = Jsoup.parse(content).text();
+          String cleaned = HTMLParserFactory.parse(htmlParser, content);
           Map<String, Integer> map = Maps.newHashMap();
           for (String term : AnalyzerUtils.parse(ANALYZER, cleaned)) {
             if (term.length() > MAX_TOKEN_LENGTH) {
@@ -184,6 +187,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
   public static final String OUTPUT_OPTION = "output";
   public static final String DF_MIN_OPTION = "dfMin";
   public static final String PREPROCESSING = "preprocessing";
+  public static final String HTML_PARSER = "htmlParser";
 
   /**
    * Runs this tool.
@@ -200,6 +204,8 @@ public class ComputeTermStatistics extends Configured implements Tool {
         .create(DF_MIN_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
+        .hasArg().withDescription("htmlParser").create(HTML_PARSER));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -214,7 +220,7 @@ public class ComputeTermStatistics extends Configured implements Tool {
     }
 
     if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
-        || !cmdline.hasOption(PREPROCESSING)) {
+        || !cmdline.hasOption(PREPROCESSING) || !cmdline.hasOption(HTML_PARSER)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -224,13 +230,16 @@ public class ComputeTermStatistics extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String htmlParser = cmdline.getOptionValue(HTML_PARSER);
 
     LOG.info("Tool name: " + ComputeTermStatistics.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - htmlParser: " + htmlParser);
 
     getConf().set(PREPROCESSING, preprocessing);
+    getConf().set(HTML_PARSER, htmlParser);
 
     Job job = new Job(getConf(), ComputeTermStatistics.class.getSimpleName() + ":" + input);
     job.setJarByClass(ComputeTermStatistics.class);

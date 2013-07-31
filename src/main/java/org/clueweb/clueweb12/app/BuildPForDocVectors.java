@@ -46,6 +46,7 @@ import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.HTMLParserFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.data.array.IntArrayWritable;
@@ -69,6 +70,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
 
     private DefaultFrequencySortedDictionary dictionary;
 
+    private static String htmlParser;
+
     @Override
     public void setup(Context context) throws IOException {
       FileSystem fs = FileSystem.get(context.getConfiguration());
@@ -81,6 +84,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
         LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
         System.exit(1);
       }
+      htmlParser = context.getConfiguration().get(HTML_PARSER);
     }
 
     @Override
@@ -108,7 +112,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
             return;
           }
 
-          String cleaned = Jsoup.parse(content).text();
+          String cleaned = HTMLParserFactory.parse(htmlParser, content);
           List<String> tokens = AnalyzerUtils.parse(ANALYZER, cleaned);
 
           int len = 0;
@@ -140,6 +144,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
   public static final String DICTIONARY_OPTION = "dictionary";
   public static final String REDUCERS_OPTION = "reducers";
   public static final String PREPROCESSING = "preprocessing";
+  public static final String HTML_PARSER = "htmlParser";
 
   /**
    * Runs this tool.
@@ -158,6 +163,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
         .withDescription("number of reducers").create(REDUCERS_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
+        .hasArg().withDescription("htmlParser").create(HTML_PARSER));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -172,7 +179,8 @@ public class BuildPForDocVectors extends Configured implements Tool {
     }
 
     if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
-        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(PREPROCESSING)) {
+        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(PREPROCESSING)
+        || !cmdline.hasOption(HTML_PARSER)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -183,6 +191,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String htmlParser = cmdline.getOptionValue(HTML_PARSER);
 
     Job job = new Job(getConf(), BuildPForDocVectors.class.getSimpleName() + ":" + input);
     job.setJarByClass(BuildPForDocVectors.class);
@@ -192,6 +201,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
     LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - htmlParser: " + htmlParser);
 
     if (cmdline.hasOption(REDUCERS_OPTION)) {
       int numReducers = Integer.parseInt(cmdline.getOptionValue(REDUCERS_OPTION));
@@ -206,6 +216,7 @@ public class BuildPForDocVectors extends Configured implements Tool {
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
     job.getConfiguration().set(PREPROCESSING, preprocessing);
+    job.getConfiguration().set(HTML_PARSER, htmlParser);
 
     job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);

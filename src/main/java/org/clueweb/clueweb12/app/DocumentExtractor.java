@@ -74,6 +74,7 @@ import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.HTMLParserFactory;
 import org.jsoup.Jsoup;
 import org.mortbay.log.Log;
 
@@ -87,10 +88,11 @@ public class DocumentExtractor extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DocumentExtractor.class);
 
   private static enum Records {
-    DOCUMENTS_FOUND, JSOUP_EXCEPTIONS
+    DOCUMENTS_FOUND, HTML_PARSER_EXCEPTIONS
   };
 
   private static boolean keepHTML;
+  private static String htmlParser;
   private static final HashMap<String, String> docidMap = Maps.newHashMap();
   private static final String EMPTY = "";
 
@@ -105,6 +107,10 @@ public class DocumentExtractor extends Configured implements Tool {
 
       keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
       LOG.info("keephtml is set to " + keepHTML);
+
+      if (keepHTML) {
+        htmlParser = context.getConfiguration().get(HTML_PARSER);
+      }
 
       BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
       String line;
@@ -129,7 +135,7 @@ public class DocumentExtractor extends Configured implements Tool {
         try {
 
           if (!keepHTML) {
-            docidMap.put(docid, Jsoup.parse(doc.getContent()).text());
+            docidMap.put(docid, HTMLParserFactory.parse(htmlParser, doc.getContent()));
           } else {
             docidMap.put(docid, doc.getContent());
           }
@@ -137,7 +143,7 @@ public class DocumentExtractor extends Configured implements Tool {
         } catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on.
           LOG.info("Error caught processing " + docid);
-          context.getCounter(Records.JSOUP_EXCEPTIONS).increment(1);
+          context.getCounter(Records.HTML_PARSER_EXCEPTIONS).increment(1);
         }
       }
     }
@@ -171,6 +177,7 @@ public class DocumentExtractor extends Configured implements Tool {
   public static final String OUTPUT_OPTION = "output";
   public static final String DOCIDS_FILE = "docidsfile";
   public static final String KEEP_HTML = "keephtml";
+  public static final String HTML_PARSER = "htmlParser";
 
   /**
    * Runs this tool.
@@ -187,6 +194,8 @@ public class DocumentExtractor extends Configured implements Tool {
         .withDescription("docids file path").create(DOCIDS_FILE));
     options.addOption(OptionBuilder.withArgName("true|false").hasArg().withDescription("keep HTML")
         .create(KEEP_HTML));
+    options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
+        .hasArg().withDescription("htmlParser").create(HTML_PARSER));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -212,6 +221,7 @@ public class DocumentExtractor extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String docidsfile = cmdline.getOptionValue(DOCIDS_FILE);
     boolean keephtml = (cmdline.getOptionValue(KEEP_HTML).equals("true")) ? true : false;
+    String htmlParser = (keephtml == true) ? cmdline.getOptionValue(HTML_PARSER) : "";
 
     LOG.info("Tool name: " + DocumentExtractor.class.getSimpleName());
     LOG.info(" - input: " + input);
@@ -223,6 +233,7 @@ public class DocumentExtractor extends Configured implements Tool {
     conf.set(DOCIDS_FILE, docidsfile);
     conf.setBoolean(KEEP_HTML, keephtml);
     conf.set(OUTPUT_OPTION, output);
+    conf.set(HTML_PARSER, htmlParser);
 
     Job job = new Job(getConf(), DocumentExtractor.class.getSimpleName() + ":" + input);
     job.setJarByClass(DocumentExtractor.class);
@@ -245,8 +256,9 @@ public class DocumentExtractor extends Configured implements Tool {
     int numDocsFound = (int) job.getCounters().findCounter(Records.DOCUMENTS_FOUND).getValue();
     LOG.info("Number of documents found: " + numDocsFound);
 
-    int numExceptions = (int) job.getCounters().findCounter(Records.JSOUP_EXCEPTIONS).getValue();
-    LOG.info("Number of Jsoup exceptions: " + numExceptions);
+    int numExceptions = (int) job.getCounters().findCounter(Records.HTML_PARSER_EXCEPTIONS)
+        .getValue();
+    LOG.info("Number of HTML parser exceptions: " + numExceptions);
 
     return 0;
   }
