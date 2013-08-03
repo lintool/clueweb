@@ -28,10 +28,21 @@ public class HTMLParserFactory {
       return handler.toString();
     }
 
-    if (parserType.equals("boilerpipe")) {
+    if (parserType.startsWith("boilerpipe")) {
       Metadata metadata = new Metadata();
       ContentHandler handler = new BodyContentHandler();
-      BoilerpipeContentHandler bpch = new BoilerpipeContentHandler(handler);
+      
+      BoilerpipeContentHandler bpch = null;
+      
+      if(parserType.equals("boilerpipe"))
+        bpch = new BoilerpipeContentHandler(handler,new de.l3s.boilerpipe.extractors.DefaultExtractor());
+      else if(parserType.endsWith("-article"))
+        bpch = new BoilerpipeContentHandler(handler,  new de.l3s.boilerpipe.extractors.ArticleExtractor());
+      else if(parserType.endsWith("-keepEverythingMin100"))
+        bpch = new BoilerpipeContentHandler(handler,new de.l3s.boilerpipe.extractors.KeepEverythingWithMinKWordsExtractor(100));
+      else
+        return null;
+      
       bpch.setIncludeMarkup(false);
       new HtmlParser().parse(new ByteArrayInputStream(content.getBytes("UTF-8")), bpch, metadata,
           new ParseContext());
@@ -42,6 +53,6 @@ public class HTMLParserFactory {
   }
 
   public static String getOptions() {
-    return "jsoup|tika|boilerpipe";
+    return "jsoup|tika|boilerpipe|boilerpipe-article|boilerpipe-keepEverythingMin100";
   }
 }

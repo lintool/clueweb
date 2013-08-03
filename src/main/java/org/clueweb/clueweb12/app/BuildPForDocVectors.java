@@ -217,6 +217,12 @@ public class BuildPForDocVectors extends Configured implements Tool {
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
     job.getConfiguration().set(PREPROCESSING, preprocessing);
     job.getConfiguration().set(HTML_PARSER, htmlParser);
+    
+    job.getConfiguration().set("mapreduce.map.memory.mb", "10048");
+    job.getConfiguration().set("mapreduce.map.java.opts", "-Xmx10048m");
+    job.getConfiguration().set("mapreduce.reduce.memory.mb", "10048");
+    job.getConfiguration().set("mapreduce.reduce.java.opts", "-Xmx10048m");
+    job.getConfiguration().set("mapred.task.timeout", "6000000"); // default is 600000
 
     job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);
