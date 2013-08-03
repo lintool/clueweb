@@ -1,5 +1,6 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
+
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -35,7 +36,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.PriorityQueue;
+
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -68,11 +71,40 @@ import org.clueweb.util.TRECResultFileParser;
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
+
 import com.google.common.collect.Maps;
 
 public class RMModel extends Configured implements Tool {
 
 	private static final Logger LOG = Logger.getLogger(RMModel.class);
+	
+	/*
+	 * class that keeps track of a document's weight (based on RSV) in different queries
+	 */
+	private static class DWeight {
+	  private static HashMap<Integer, Double> weights;
+	  private static String docid;
+	  
+	  DWeight(String docid) {
+	    weights = new HashMap<Integer,Double>();
+	    this.docid = docid;
+	  }
+	  
+	  public void setQueryWeight(int qid, double weight) {
+	    weights.put(qid, weight);
+	  }
+	  
+	  public double getQueryWeight(int qid) {
+	    if(hasQueryWeight(qid)) {
+	      return weights.get(qid);
+	    }
+	    return 0.0;
+	  }
+	  
+	  public boolean hasQueryWeight(int qid) {
+	    return weights.containsKey(qid);
+	  }
+	}
 
 	/*
 	 * Mapper outKey: (qid,docid), value: probability score
@@ -83,13 +115,11 @@ public class RMModel extends Configured implements Tool {
 		private static final PForDocVector DOC = new PForDocVector();
 		private DefaultFrequencySortedDictionary dictionary;
 
-		// complex key: (qid,docid)
 		private static final IntWritable keyOut = new IntWritable();
-		// value: float; probability score log(P(q|d))
 		private static final PairOfStringFloat valueOut = new PairOfStringFloat();
 
 		// outer key: docid, inner key: qid, inner value: weight
-		private static HashMap<String, HashMap<Integer, Double>> docidWeights;
+		private static List<DWeight> docidWeights;
 
 		@Override
 		public void setup(Context context) throws IOException {
