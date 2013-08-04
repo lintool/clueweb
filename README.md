@@ -1,7 +1,7 @@
 ClueWeb Tools (Fork) - Retrieval models
 =======================================
 
-The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). The only change occured in the addition of a retrieval app and spam filter app
+The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). This repository focuses on additional apps (for retrieval, spam filtering, duplicate filtering, etc.)
 
 
 Differences to the original lintool/clueweb repository
