@@ -1,4 +1,0 @@
-Make a simple proxy where you search on Googl eand DuckDuckGo - which query do you need to get the same results in DuckDuckGo?
-	-> node.js
-
-Is then used to generate a set of rules which we can use to make the Firefox plugin
