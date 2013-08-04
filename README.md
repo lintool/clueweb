@@ -3,6 +3,13 @@ ClueWeb Tools (Fork) - Retrieval models
 
 The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). The only change occured in the addition of a retrieval app and spam filter app
 
+
+Differences to the original lintool/clueweb repository
+------------------------------------------------------
++ The apps `BuildPForDocVectors`, `BuildVByteDocVectors` and `ComputeTermStatistics` require an additional parameter: `htmlParser` which can either be `tika` or `jsoup` (changes the HTML parser used).
+
+
+
 Retrieval
 ---------
 
@@ -31,7 +38,7 @@ The parameters are:
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
 + `docvector`: HDFS path to the document vectors (PFor format) created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
 + `topk`: number of results that should be returned per query (default is 1000)
-+ `preprocessing`: indicates the tokenizaton/stemming procedure; either `porter` or `standard` at the moment; needs to be in line with the dictionary/docvector
++ `preprocessing`: indicates the tokenizaton/stemming procedure; either `porter`, `krovetz` or `standard` at the moment; needs to be in line with the dictionary/docvector
 
 
 Spam Filter
