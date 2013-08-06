@@ -110,7 +110,6 @@ public class RMRetrieval extends Configured implements Tool {
 		}
 	}
 
-
 	/*
 	 * Mapper outKey: (qid,docid), value: probability score
 	 */
