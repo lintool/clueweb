@@ -84,7 +84,6 @@ import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
-import org.clueweb.util.PairOfStringFloatComparator;
 
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
@@ -94,9 +93,9 @@ import tl.lin.lucene.AnalyzerUtils;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
-public class LMRetrieval extends Configured implements Tool {
+public class RMRetrieval extends Configured implements Tool {
 
-	private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
+	private static final Logger LOG = Logger.getLogger(RMRetrieval.class);
 
 	/*
 	 * Partitioner: all keys with the same qid go to the same reducer
@@ -110,6 +109,7 @@ public class LMRetrieval extends Configured implements Tool {
 			return arg0.getLeftElement() % numPartitions;
 		}
 	}
+
 
 	/*
 	 * Mapper outKey: (qid,docid), value: probability score
@@ -291,7 +291,7 @@ public class LMRetrieval extends Configured implements Tool {
 				queue = queueMap.get(qid);
 			} else {
 				queue = new PriorityQueue<PairOfStringFloat>(topk + 1,
-						new PairOfStringFloatComparator());
+						new CustomComparator());
 				queueMap.put(qid, queue);
 			}
 
@@ -411,7 +411,7 @@ public class LMRetrieval extends Configured implements Tool {
 		String topk = cmdline.getOptionValue(TOPK);
 		String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
-		LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
+		LOG.info("Tool name: " + RMRetrieval.class.getSimpleName());
 		LOG.info(" - docvector: " + docvector);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
@@ -437,9 +437,9 @@ public class LMRetrieval extends Configured implements Tool {
 		if (fs.exists(new Path(output)))
 			fs.delete(new Path(output));
 
-		Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":"
+		Job job = new Job(conf, RMRetrieval.class.getSimpleName() + ":"
 				+ docvector);
-		job.setJarByClass(LMRetrieval.class);
+		job.setJarByClass(RMRetrieval.class);
 
 		FileInputFormat.setInputPaths(job, docvector);
 		FileOutputFormat.setOutputPath(job, new Path(output));
@@ -467,8 +467,8 @@ public class LMRetrieval extends Configured implements Tool {
 	 * <code>ToolRunner</code>.
 	 */
 	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + LMRetrieval.class.getCanonicalName()
+		LOG.info("Running " + RMRetrieval.class.getCanonicalName()
 				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new LMRetrieval(), args);
+		ToolRunner.run(new RMRetrieval(), args);
 	}
 }

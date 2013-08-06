@@ -33,9 +33,12 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.PriorityQueue;
 
@@ -64,47 +67,23 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.clueweb.data.PForDocVector;
+import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
+import org.clueweb.util.PairOfStringFloatComparator;
 import org.clueweb.util.TRECResult;
 import org.clueweb.util.TRECResultFileParser;
 
 import tl.lin.data.array.IntArrayWritable;
+import tl.lin.data.pair.PairOfFloatInt;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 
 public class RMModel extends Configured implements Tool {
 
 	private static final Logger LOG = Logger.getLogger(RMModel.class);
-	
-	/*
-	 * class that keeps track of a document's weight (based on RSV) in different queries
-	 */
-	private static class DWeight {
-	  private static HashMap<Integer, Double> weights;
-	  private static String docid;
-	  
-	  DWeight(String docid) {
-	    weights = new HashMap<Integer,Double>();
-	    this.docid = docid;
-	  }
-	  
-	  public void setQueryWeight(int qid, double weight) {
-	    weights.put(qid, weight);
-	  }
-	  
-	  public double getQueryWeight(int qid) {
-	    if(hasQueryWeight(qid)) {
-	      return weights.get(qid);
-	    }
-	    return 0.0;
-	  }
-	  
-	  public boolean hasQueryWeight(int qid) {
-	    return weights.containsKey(qid);
-	  }
-	}
 
 	/*
 	 * Mapper outKey: (qid,docid), value: probability score
@@ -114,12 +93,16 @@ public class RMModel extends Configured implements Tool {
 
 		private static final PForDocVector DOC = new PForDocVector();
 		private DefaultFrequencySortedDictionary dictionary;
+    private TermStatistics stats;
 
 		private static final IntWritable keyOut = new IntWritable();
 		private static final PairOfStringFloat valueOut = new PairOfStringFloat();
 
-		// outer key: docid, inner key: qid, inner value: weight
-		private static List<DWeight> docidWeights;
+		//query likelihood based document ranking
+		private static List<TRECResult> qlRanking;
+		private static HashSet<String> topRankedDocs;//a hashset for quick checking
+		
+		private double smoothingParam;
 
 		@Override
 		public void setup(Context context) throws IOException {
@@ -127,55 +110,55 @@ public class RMModel extends Configured implements Tool {
 			FileSystem fs = FileSystem.get(context.getConfiguration());
 			String path = context.getConfiguration().get(DICTIONARY_OPTION);
 			dictionary = new DefaultFrequencySortedDictionary(path, fs);
-
-			docidWeights = Maps.newHashMap();
+			stats = new TermStatistics(new Path(path), fs);
+			
+			smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
+      LOG.info("Smoothing set to "+smoothingParam);
 
 			int numFeedbackDocs = context.getConfiguration().getInt(
 					NUM_FEEDBACK_DOCS, 20);
-			int numFeedbackTerms = context.getConfiguration().getInt(
-					NUM_FEEDBACK_TERMS, 20);
 
 			LOG.info("Number of feedback documents set to: " + numFeedbackDocs);
-			LOG.info("Number of feedback terms set set to: " + numFeedbackTerms);
 
-			// read the TREC result file of the initial retrieval run as input
-			// TREC result file is expected to be in order (higher ranked
-			// documents first)
-			// computed are for each (qid,did) the normalized weight of the
-			// document
-			TRECResultFileParser parser = new TRECResultFileParser(fs,
-					new Path(context.getConfiguration().get(TREC_RESULT_FILE)));
-
+			qlRanking = new ArrayList<TRECResult>();
+			topRankedDocs = Sets.newHashSet();
 			int currentQuery = -1;
-			// key: docid, value: retrieval score
-			HashMap<String, Double> scores = Maps.newHashMap();
+			int numResults = 0;
+
+	    // read the TREC result file of the initial retrieval run as input;
+			// keep the top N documents per query
+			TRECResultFileParser parser = new TRECResultFileParser(fs,
+          new Path(context.getConfiguration().get(TREC_RESULT_FILE)));
 			while (parser.hasNext()) {
 				TRECResult tr = parser.getNext();
-				tr.score = Math.exp(tr.score);
-
-				if (currentQuery == tr.qid && scores.size() == numFeedbackDocs) {
-					double sum = 0.0;
-					for (String s : scores.keySet()) {
-						sum += scores.get(s);
-					}
-
-					for (String s : scores.keySet()) {
-						HashMap<Integer, Double> m = null;
-						if (docidWeights.containsKey(s)) {
-							m = docidWeights.get(s);
-						} else {
-							m = Maps.newHashMap();
-							docidWeights.put(s, m);
-						}
-						m.put(tr.qid, scores.get(s) / sum);
-					}
-				} else if (currentQuery != tr.qid) {
-					currentQuery = tr.qid;
-					scores.clear();
-				} else {
-					;
+				//a negative value is assumed to be the log of a prob
+				tr.score = (tr.score<0)?Math.exp(tr.score):tr.score;
+				
+				if(tr.qid!=currentQuery) {
+				  numResults=0;
 				}
-				scores.put(tr.did, tr.score);
+				
+				currentQuery = tr.qid;
+				
+				if(numResults<numFeedbackDocs) {
+				  qlRanking.add(tr);
+				  topRankedDocs.add(tr.did);
+				  numResults++;
+				}
+			}
+			
+			//normalize the weights of the documents kept per query
+			HashMap<Integer, Double> scoreSum = Maps.newHashMap();
+			for(TRECResult tr : qlRanking) {
+			  double sum = tr.score;
+			  if(scoreSum.containsKey(tr.qid)) {
+			    sum += scoreSum.get(tr.qid);
+			  }
+			  scoreSum.put(tr.qid, sum);
+			}
+			
+			for(TRECResult tr : qlRanking) {
+			  tr.score = tr.score/scoreSum.get(tr.qid);
 			}
 		}
 
@@ -186,8 +169,8 @@ public class RMModel extends Configured implements Tool {
 			PForDocVector.fromIntArrayWritable(ints, DOC);
 
 			// are we interested in this document?
-			if (docidWeights.containsKey(key.toString()) == false) {
-				return;
+			if(topRankedDocs.contains(key.toString())==false) {
+			  return;
 			}
 
 			// tfMap of the document
@@ -202,21 +185,33 @@ public class RMModel extends Configured implements Tool {
 			// compute P(term|doc) for each term occurring in the doc
 			for (Integer termid : tfMap.keySet()) {
 
-				double mlProb = (double) tfMap.get(termid)
-						/ (double) DOC.getLength();
+			  String term = dictionary.getTerm(termid);
+			  double tf = tfMap.get(termid);
+        double df = stats.getDf(termid);
 
-				// for all queries, in which this document appears, emit
-				// something
-				HashMap<Integer, Double> normScores = docidWeights.get(key
-						.toString());
+        double mlProb = tf / (double) DOC.getLength();
+        double colProb = df / (double) stats.getCollectionSize();
 
-				for (int qid : normScores.keySet()) {
-					double weight = normScores.get(qid);
+        double prob = 0.0;
 
-					double p = weight * mlProb;
+        // JM smoothing
+        if (smoothingParam <= 1.0) {
+          prob = smoothingParam * mlProb + (1.0 - smoothingParam)
+              * colProb;
+        }
+        // Dirichlet smoothing
+        else {
+          prob = (double) (tf + smoothingParam * colProb)
+              / (double) (DOC.getLength() + smoothingParam);
+        }
 
-					keyOut.set(qid);
-					valueOut.set(dictionary.getTerm(termid), (float) p);
+				for(TRECResult tr : qlRanking) {
+				  if(tr.did.equals(key.toString())==false) {
+				    continue;
+				  }
+				  float termScore = (float)(prob * tr.score);
+				  keyOut.set(tr.qid);
+				  valueOut.set(term,termScore);
 					context.write(keyOut, valueOut);
 				}
 			}
@@ -224,59 +219,64 @@ public class RMModel extends Configured implements Tool {
 	}
 
 	private static class MyReducer extends
-			Reducer<IntWritable, PairOfStringFloat, NullWritable, Text> {
+			Reducer<IntWritable, PairOfStringFloat, Text, FloatWritable> {
 
-		private HashMap<String, Double> termMap;
-		private static final NullWritable nullKey = NullWritable.get();
-		private static final Text valueOut = new Text();
-
-		public void setup(Context context) throws IOException {
-			termMap = Maps.newHashMap();
-		}
+		private static final Text keyOut = new Text();
+		private static final FloatWritable valueOut = new FloatWritable();
+		
+		private int numFeedbackTerms;
+		
+		@Override
+    public void setup(Context context) throws IOException {
+      numFeedbackTerms = context.getConfiguration().getInt(NUM_FEEDBACK_DOCS, 20);
+    }
 
 		@Override
 		public void reduce(IntWritable key, Iterable<PairOfStringFloat> values,
 				Context context) throws IOException, InterruptedException {
 
+	    HashMap<String, Double> termMap = Maps.newHashMap();
+	    
 			for (PairOfStringFloat p : values) {
 				String term = p.getLeftElement();
 				float score = p.getRightElement();
 
 				if (termMap.containsKey(term)) {
-					termMap.put(term, termMap.get(term) + score);
-				} else {
-					termMap.put(term, (double) score);
+					score += termMap.get(term);
 				}
+				termMap.put(term, (double) score);
 			}
 
-			StringBuffer sb = new StringBuffer();
-			sb.append("++++ " + key.get() + " ++++\n");
-
+			//priority queue to only keep the highest scoring terms
 			PriorityQueue<PairOfStringFloat> queue = new PriorityQueue<PairOfStringFloat>(
-					20);
+					numFeedbackTerms, new PairOfStringFloatComparator());
 
 			for (String term : termMap.keySet()) {
-				if (queue.size() < 20) {
-					PairOfStringFloat p = new PairOfStringFloat();
-					p.set(term, termMap.get(term).floatValue());
-					queue.add(p);
-				} else {
-					if (queue.peek().getRightElement() < termMap.get(term)) {
-						queue.remove();
-						PairOfStringFloat p = new PairOfStringFloat();
-						p.set(term, termMap.get(term).floatValue());
-						queue.add(p);
-					}
+				if(queue.size()>=numFeedbackTerms && queue.peek().getRightElement()<termMap.get(term)) {
+				  queue.remove();
+				}
+				
+				if(queue.size()<numFeedbackTerms) {
+				  queue.add(new PairOfStringFloat(term, termMap.get(term).floatValue()));
 				}
 			}
 
-			while (queue.size() > 0) {
-				PairOfStringFloat p = queue.remove();
-				sb.append(p.getLeftElement() + " " + p.getRightElement());
+			//normalize the weights to sum to one
+			double sum = 0.0;
+			Iterator<PairOfStringFloat> it = queue.iterator();
+			while(it.hasNext()) {
+			  sum += it.next().getRightElement();
 			}
 			
-			valueOut.set(sb.toString());
-			context.write(nullKey, valueOut);
+			//final step: output the normalized <term, weight> pairs
+			it = queue.iterator();
+			while(it.hasNext()) {
+			  PairOfStringFloat p = it.next();
+			  keyOut.set(key.toString()+"\t"+p.getLeftElement());
+			  double normalized = p.getRightElement()/sum;
+			  valueOut.set((float)normalized);
+			  context.write(keyOut, valueOut);
+			}
 		}
 	}
 
@@ -286,7 +286,8 @@ public class RMModel extends Configured implements Tool {
 	public static final String NUM_FEEDBACK_TERMS = "numFeedbackTerms";
 	public static final String TREC_RESULT_FILE = "trecinputfile";
 	public static final String DICTIONARY_OPTION = "dictionary";
-
+  public static final String SMOOTHING = "smoothing";
+  
 	/**
 	 * Runs this tool.
 	 */
@@ -310,6 +311,8 @@ public class RMModel extends Configured implements Tool {
 				.withDescription("numFeedbackTerms").create(NUM_FEEDBACK_TERMS));
 		options.addOption(OptionBuilder.withArgName("path").hasArg()
 				.withDescription("input path").create(TREC_RESULT_FILE));
+    options.addOption(OptionBuilder.withArgName("float").hasArg()
+        .withDescription("smoothing").create(SMOOTHING));
 
 		CommandLine cmdline;
 		CommandLineParser parser = new GnuParser();
@@ -329,6 +332,7 @@ public class RMModel extends Configured implements Tool {
 				|| !cmdline.hasOption(DICTIONARY_OPTION)
 				|| !cmdline.hasOption(TREC_RESULT_FILE)
 				|| !cmdline.hasOption(NUM_FEEDBACK_DOCS)
+				|| !cmdline.hasOption(SMOOTHING) 
 				|| !cmdline.hasOption(NUM_FEEDBACK_TERMS)) {
 			HelpFormatter formatter = new HelpFormatter();
 			formatter.printHelp(this.getClass().getName(), options);
@@ -340,6 +344,7 @@ public class RMModel extends Configured implements Tool {
 		String output = cmdline.getOptionValue(OUTPUT_OPTION);
 		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
 		String trecinput = cmdline.getOptionValue(TREC_RESULT_FILE);
+    float smoothing = Float.parseFloat(cmdline.getOptionValue(SMOOTHING));
 		int numDocs = Integer.parseInt(cmdline
 				.getOptionValue(NUM_FEEDBACK_DOCS));
 		int numTerms = Integer.parseInt(cmdline
@@ -352,12 +357,14 @@ public class RMModel extends Configured implements Tool {
 		LOG.info(" - trecinputfile: " + trecinput);
 		LOG.info(" - numFeedbackDocs: " + numDocs);
 		LOG.info(" - numFeedbackTerms: " + numTerms);
+		LOG.info(" - smoothing: " + smoothing);
 
 		Configuration conf = getConf();
 		conf.set(DICTIONARY_OPTION, dictionary);
 		conf.set(TREC_RESULT_FILE, trecinput);
 		conf.setInt(NUM_FEEDBACK_DOCS, numDocs);
 		conf.setInt(NUM_FEEDBACK_TERMS, numTerms);
+		conf.setFloat(SMOOTHING, smoothing);
 		
     conf.set("mapreduce.map.memory.mb", "10048");
     conf.set("mapreduce.map.java.opts", "-Xmx10048m");
@@ -380,8 +387,8 @@ public class RMModel extends Configured implements Tool {
 
 		job.setMapOutputKeyClass(IntWritable.class);
 		job.setMapOutputValueClass(PairOfStringFloat.class);
-		job.setOutputKeyClass(NullWritable.class);
-		job.setOutputValueClass(Text.class);
+		job.setOutputKeyClass(Text.class);
+		job.setOutputValueClass(FloatWritable.class);
 
 		job.setMapperClass(MyMapper.class);
 		job.setReducerClass(MyReducer.class);
