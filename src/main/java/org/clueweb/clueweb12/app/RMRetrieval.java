@@ -39,7 +39,6 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -84,6 +83,7 @@ import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.PairOfStringFloatComparator;
 
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
@@ -95,379 +95,446 @@ import com.google.common.collect.Sets;
 
 public class RMRetrieval extends Configured implements Tool {
 
-	private static final Logger LOG = Logger.getLogger(RMRetrieval.class);
+  private static final Logger LOG = Logger.getLogger(RMRetrieval.class);
 
-	/*
-	 * Partitioner: all keys with the same qid go to the same reducer
-	 */
-	private static class MyPartitioner extends
-			Partitioner<PairOfIntString, FloatWritable> {
+  /*
+   * Partitioner: all keys with the same qid go to the same reducer
+   */
+  private static class MyPartitioner extends Partitioner<PairOfIntString, FloatWritable> {
 
-		@Override
-		public int getPartition(PairOfIntString arg0, FloatWritable arg1,
-				int numPartitions) {
-			return arg0.getLeftElement() % numPartitions;
-		}
-	}
+    @Override
+    public int getPartition(PairOfIntString arg0, FloatWritable arg1, int numPartitions) {
+      return arg0.getLeftElement() % numPartitions;
+    }
+  }
 
-	/*
-	 * Mapper outKey: (qid,docid), value: probability score
-	 */
-	private static class MyMapper extends
-			Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
+  /*
+   * relevance language model;
+   * addTerm() should be used to read the RMModel output file
+   * interpolateWithQueryTerm() should be used to interpolate with the max. likelihood query model
+   * 
+   * RM1: do not call interpolateWithQueryTerm() or use queryLambda=0.0
+   * RM3: queryLambda>0
+   */
+  private static class RelLM {
+    public int qid;
+    private HashMap<Integer, Double> probMap;
 
-		private static final PForDocVector DOC = new PForDocVector();
-		private DefaultFrequencySortedDictionary dictionary;
-		private TermStatistics stats;
-		private double smoothingParam;
-		
-		private static Analyzer ANALYZER;
+    public RelLM(int qid) {
+      this.qid = qid;
+      probMap = Maps.newHashMap();
+    }
 
-		/*
-		 * for quick access store the queries in two hashmaps: 1. key: termid,
-		 * value: list of queries in which the termid occurs 2. key: qid, value:
-		 * list of termids that occur in the query
-		 */
-		private HashMap<Integer, HashSet<Integer>> termidQuerySet;
-		private HashMap<Integer, HashSet<Integer>> queryTermidSet;
+    public void addTerm(int termid, double weight) {
+      probMap.put(termid, weight);
+    }
 
-		// complex key: (qid,docid)
-		private static final PairOfIntString keyOut = new PairOfIntString();
-		// value: float; probability score log(P(q|d))
-		private static final FloatWritable valueOut = new FloatWritable();// score
+    // RM3 is an interpolation between the query max. likelihood LM and the RM model
+    public void interpolateWithQueryTerm(int termid, double weight, double queryLambda) {
+      double prob = queryLambda * weight;
+      if (probMap.containsKey(termid)) {
+        prob += (1.0 - queryLambda) * probMap.get(termid);
+      }
+      probMap.put(termid, prob);
+    }
+    
+    public boolean containsTerm(int termid) {
+      return probMap.containsKey(termid);
+    }
+    
+    public double getWeight(int termid) {
+      if(!containsTerm(termid)) {
+        return 0.0;
+      }
+      return probMap.get(termid);
+    }
+  }
 
-		@Override
-		public void setup(Context context) throws IOException {
+  /*
+   * Mapper outKey: (qid,docid), value: probability score
+   */
+  private static class MyMapper extends
+      Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
 
-			FileSystem fs = FileSystem.get(context.getConfiguration());
-			String path = context.getConfiguration().get(DICTIONARY_OPTION);
-			dictionary = new DefaultFrequencySortedDictionary(path, fs);
-			stats = new TermStatistics(new Path(path), fs);
+    private static final PForDocVector DOC = new PForDocVector();
+    private DefaultFrequencySortedDictionary dictionary;
+    private TermStatistics stats;
+    private double smoothingParam;
+    private double queryLambda;
 
-			smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
-			LOG.info("Smoothing set to "+smoothingParam);
-			
-			String analyzerType = context.getConfiguration().get(PREPROCESSING);
-			ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
-			if(ANALYZER==null) {
-				LOG.error("Error: proprocessing type not recognized. Abort "+this.getClass().getName());
-				System.exit(1);
-			}
+    private static Analyzer ANALYZER;
+    
+    private static HashMap<Integer, RelLM> relLMMap;
+    private static HashSet<Integer> interestingTerms;
 
-			// read the queries from file
-			termidQuerySet = Maps.newHashMap();
-			queryTermidSet = Maps.newHashMap();
-			FSDataInputStream fsin = fs.open(new Path(context
-					.getConfiguration().get(QUERIES_OPTION)));
-			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-			String line;
-			while ((line = br.readLine()) != null) {
-				int index = line.indexOf(':');
-				if (index < 0) {
-					LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
-							+ line);
-					continue;
-				}
-				int qid = Integer.parseInt(line.substring(0, index));
-				HashSet<Integer> termidSet = Sets.newHashSet();
-				
-				LOG.info("Parsing query line "+line);
+    // complex key: (qid,docid)
+    private static final PairOfIntString keyOut = new PairOfIntString();
+    // value: float; probability score log(P(q|d))
+    private static final FloatWritable valueOut = new FloatWritable();// score
 
-				// normalize the terms (same way as the documents)
-				for (String term : AnalyzerUtils.parse(ANALYZER,
-						line.substring(index + 1))) {
+    @Override
+    public void setup(Context context) throws IOException {
 
-					int termid = dictionary.getId(term);
-					LOG.info("parsed term ["+term+"] has termid "+termid);
+      FileSystem fs = FileSystem.get(context.getConfiguration());
+      String path = context.getConfiguration().get(DICTIONARY_OPTION);
+      dictionary = new DefaultFrequencySortedDictionary(path, fs);
+      stats = new TermStatistics(new Path(path), fs);
+      interestingTerms = Sets.newHashSet();
 
-					if (termid < 0) {
-						continue;
-					}
+      smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
+      LOG.info("Smoothing set to " + smoothingParam);
+      
+      queryLambda = context.getConfiguration().getFloat(QUERY_LAMBDA, 0.6f);
+      
+      /*
+       * Read the relevance model from file
+       */
+      relLMMap = Maps.newHashMap();
+      
+      FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(RMMODEL)));
+      BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
+      String line;
+      while ((line = br.readLine()) != null) {
+        
+        String tokens[] = line.split("\\s+");
+        int qid = Integer.parseInt(tokens[0]);
+        String term = tokens[1];
+        double weight = Double.parseDouble(tokens[2]);
+        
+        RelLM rellm = null;
+        if(relLMMap.containsKey(qid)) {
+          rellm = relLMMap.get(qid);
+        }
+        else {
+          rellm = new RelLM(qid);
+          relLMMap.put(qid, rellm);
+        }
+        rellm.addTerm(dictionary.getId(term), weight);
+        interestingTerms.add(dictionary.getId(term));
+      }
 
-					termidSet.add(termid);
+      br.close();
+      fsin.close();
+    
+      
+      /*
+       * Interpolate the relevance model with the query maximum likelihood model
+       */
+      String analyzerType = context.getConfiguration().get(PREPROCESSING);
+      ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
+      if (ANALYZER == null) {
+        LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
+        System.exit(1);
+      }
 
-					if (termidQuerySet.containsKey(termid)) {
-						termidQuerySet.get(termid).add(qid);
-					} else {
-						Set<Integer> qids = Sets.newHashSet();
-						qids.add(qid);
-						termidQuerySet.put(termid, (HashSet<Integer>) qids);
-					}
-				}
+      fsin = fs.open(new Path(context.getConfiguration().get(QUERIES_OPTION)));
+      br = new BufferedReader(new InputStreamReader(fsin));
+      while ((line = br.readLine()) != null) {
+        int index = line.indexOf(':');
+        if (index < 0) {
+          LOG.info("Query file line in incorrect format, expecting <num>:<term> <term>...\n,instead got:\n"
+              + line);
+          continue;
+        }
+        int qid = Integer.parseInt(line.substring(0, index));
 
-				queryTermidSet.put(qid, termidSet);
-			}
-			br.close();
-			fsin.close();
-		}
+        HashSet<Integer> termSet = Sets.newHashSet();
+        // normalize the terms (same way as the documents)
+        for (String term : AnalyzerUtils.parse(ANALYZER, line.substring(index + 1))) {
 
-		@Override
-		public void map(Text key, IntArrayWritable ints, Context context)
-				throws IOException, InterruptedException {
+          int termid = dictionary.getId(term);
+          if(termid>0) {
+            termSet.add(termid);
+            interestingTerms.add(termid);
+          }
+        }
+        
+        if(termSet.size()==0) {
+          continue;
+        }
+        
+        double termWeight = 1.0/(double)termSet.size();
+        for(int termid : termSet) {
+          RelLM rellm = null;
+          if(relLMMap.containsKey(qid)) {
+            rellm = relLMMap.get(qid);
+          }
+          else {
+            rellm = new RelLM(qid);
+            relLMMap.put(qid, rellm);
+          }
+          rellm.interpolateWithQueryTerm(termid, termWeight, queryLambda);
+        }
+        
+      }
+      br.close();
+      fsin.close();
+    }
 
-			PForDocVector.fromIntArrayWritable(ints, DOC);
+    @Override
+    public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
+        InterruptedException {
 
-			// determine which queries we care about for this document
-			HashSet<Integer> queriesToDo = Sets.newHashSet();
+      PForDocVector.fromIntArrayWritable(ints, DOC);
 
-			// tfMap of the document
-			HashMap<Integer, Integer> tfMap = Maps.newHashMap();
-			for (int termid : DOC.getTermIds()) {
-				int tf = 1;
-				if (tfMap.containsKey(termid))
-					tf += tfMap.get(termid);
-				tfMap.put(termid, tf);
+      // tfMap of the document
+      HashMap<Integer, Integer> tfMap = Maps.newHashMap();
+      for (int termid : DOC.getTermIds()) {
+        int tf = 1;
+        if (tfMap.containsKey(termid))
+          tf += tfMap.get(termid);
+        tfMap.put(termid, tf);
+      }
+      
+      //for each term
+      for(int termid : tfMap.keySet()) {
+        
+        if(interestingTerms.contains(termid)==false) {
+          continue;
+        }
+        
+        double tf = tfMap.get(termid);
+        
+        //for each query
+        for(int qid : relLMMap.keySet()) {
+          RelLM rellm = relLMMap.get(qid);
+          if(rellm.containsTerm(termid)==false) {
+            continue;
+          }
+          
+          double df = stats.getDf(termid);
+          double mlProb = tf / (double) DOC.getLength();
+          double colProb = df / (double) stats.getCollectionSize();
 
-				if (termidQuerySet.containsKey(termid)) {
-					for (int qid : termidQuerySet.get(termid)) {
-						queriesToDo.add(qid);
-					}
-				}
-			}
+          double pwd = 0.0;
 
-			// for each of the interesting queries, compute log(P(q|d))
-			for (int qid : queriesToDo) {
-				double score = 0.0;
+          // JM smoothing
+          if (smoothingParam <= 1.0) {
+            pwd = smoothingParam * mlProb + (1.0 - smoothingParam) * colProb;
+          }
+          // Dirichlet smoothing
+          else {
+            pwd = (double) (tf + smoothingParam * colProb)
+                / (double) (DOC.getLength() + smoothingParam);
+          }
+          
+          double pwr = rellm.getWeight(termid);
+          
+          double score = pwr * Math.log(pwr/pwd);
+          
+          keyOut.set(qid, key.toString());
+          valueOut.set((float)score);
+          context.write(keyOut, valueOut);
+        }
+      }
+    }
+  }
 
-				for (int termid : queryTermidSet.get(qid)) {
-					double tf = 0.0;
-					if (tfMap.containsKey(termid))
-						tf = tfMap.get(termid);
-					double df = stats.getDf(termid);
+  private static class MyReducer extends
+      Reducer<PairOfIntString, FloatWritable, NullWritable, Text> {
 
-					double mlProb = tf / (double) DOC.getLength();
-					double colProb = df / (double) stats.getCollectionSize();
+    private int topk;
+    // PairOfStringFloat is (docid,score)
+    private Map<Integer, PriorityQueue<PairOfStringFloat>> queueMap;
+    private static final NullWritable nullKey = NullWritable.get();
+    private static final Text valueOut = new Text();
 
-					double prob = 0.0;
+    public void setup(Context context) throws IOException {
 
-					// JM smoothing
-					if (smoothingParam <= 1.0) {
-						prob = smoothingParam * mlProb + (1.0 - smoothingParam)
-								* colProb;
-					}
-					// Dirichlet smoothing
-					else {
-						prob = (double) (tf + smoothingParam * colProb)
-								/ (double) (DOC.getLength() + smoothingParam);
-					}
+      topk = context.getConfiguration().getInt(TOPK, 1000);
+      LOG.info("topk parameter set to " + topk);
+      queueMap = Maps.newHashMap();
+    }
 
-					score += (float) Math.log(prob);
-				}
+    @Override
+    public void reduce(PairOfIntString key, Iterable<FloatWritable> values, Context context)
+        throws IOException, InterruptedException {
 
-				keyOut.set(qid, key.toString());
-				valueOut.set((float) score);
-				context.write(keyOut, valueOut);
-			}
-		}
-	}
+      int qid = key.getLeftElement();
 
-	private static class MyReducer extends
-			Reducer<PairOfIntString, FloatWritable, NullWritable, Text> {
+      PriorityQueue<PairOfStringFloat> queue = null;
 
-		private int topk;
-		// PairOfStringFloat is (docid,score)
-		private Map<Integer, PriorityQueue<PairOfStringFloat>> queueMap;
-		private static final NullWritable nullKey = NullWritable.get();
-		private static final Text valueOut = new Text();
+      if (queueMap.containsKey(qid)) {
+        queue = queueMap.get(qid);
+      } else {
+        queue = new PriorityQueue<PairOfStringFloat>(topk + 1, new PairOfStringFloatComparator());
+        queueMap.put(qid, queue);
+      }
 
-		public void setup(Context context) throws IOException {
-			
-			topk = context.getConfiguration().getInt(TOPK, 1000);
-			LOG.info("topk parameter set to "+topk);
+      // actually, it should only be a single element
+      float scoreSum = 0f;
+      for (FloatWritable v : values) {
+        scoreSum += v.get();
+      }
 
-			queueMap = Maps.newHashMap();
-		}
+      // if there are less than topk elements, add the new (docid,score)
+      // to the queue
+      if (queue.size() < topk) {
+        queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
+      }
+      // if we have topk elements in the queue, we need to check if the
+      // queue's current minimum is smaller than
+      // the incoming score; if yes, "exchnage" the (docid,score) elements
+      else if (queue.peek().getRightElement() < scoreSum) {
+        queue.remove();
+        queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
+      }
+    }
 
-		@Override
-		public void reduce(PairOfIntString key, Iterable<FloatWritable> values,
-				Context context) throws IOException, InterruptedException {
+    // emit the scores for all queries
+    public void cleanup(Context context) throws IOException, InterruptedException {
 
-			int qid = key.getLeftElement();
+      for (int qid : queueMap.keySet()) {
+        PriorityQueue<PairOfStringFloat> queue = queueMap.get(qid);
 
-			PriorityQueue<PairOfStringFloat> queue = null;
+        if (queue.size() == 0) {
+          continue;
+        }
 
-			if (queueMap.containsKey(qid)) {
-				queue = queueMap.get(qid);
-			} else {
-				queue = new PriorityQueue<PairOfStringFloat>(topk + 1,
-						new CustomComparator());
-				queueMap.put(qid, queue);
-			}
+        List<PairOfStringFloat> orderedList = new ArrayList<PairOfStringFloat>();
+        while (queue.size() > 0) {
+          orderedList.add(queue.remove());
+        }
 
-			// actually, it should only be a single element
-			float scoreSum = 0f;
-			for (FloatWritable v : values) {
-				scoreSum += v.get();
-			}
+        for (int i = orderedList.size(); i > 0; i--) {
+          PairOfStringFloat p = orderedList.get(i - 1);
+          valueOut.set(qid + " Q0 " + p.getLeftElement() + " " + (orderedList.size() - i + 1) + " "
+              + p.getRightElement() + " lmretrieval");
+          context.write(nullKey, valueOut);
+        }
+      }
+    }
+  }
 
-			// if there are less than topk elements, add the new (docid,score)
-			// to the queue
-			if (queue.size() < topk) {
-				queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
-			}
-			// if we have topk elements in the queue, we need to check if the
-			// queue's current minimum is smaller than
-			// the incoming score; if yes, "exchnage" the (docid,score) elements
-			else if (queue.peek().getRightElement() < scoreSum) {
-				queue.remove();
-				queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
-			}
-		}
+  public static final String DOCVECTOR_OPTION = "docvector";
+  public static final String OUTPUT_OPTION = "output";
+  public static final String DICTIONARY_OPTION = "dictionary";
+  public static final String QUERIES_OPTION = "queries";
+  public static final String SMOOTHING = "smoothing";
+  public static final String TOPK = "topk";
+  public static final String PREPROCESSING = "preprocessing";
+  public static final String RMMODEL = "rmmodel";
+  public static final String QUERY_LAMBDA = "queryLambda";
+  
+  /**
+   * Runs this tool.
+   */
+  @SuppressWarnings({ "static-access", "deprecation" })
+  public int run(String[] args) throws Exception {
+    Options options = new Options();
 
-		// emit the scores for all queries
-		public void cleanup(Context context) throws IOException,
-				InterruptedException {
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("input path (pfor format expected, add * to retrieve files)")
+        .create(DOCVECTOR_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("queries")
+        .create(QUERIES_OPTION));
+    options.addOption(OptionBuilder.withArgName("float").hasArg().withDescription("smoothing")
+        .create(SMOOTHING));
+    options.addOption(OptionBuilder.withArgName("int").hasArg().withDescription("topk")
+        .create(TOPK));
+    options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
+        .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("rmmodel file")
+        .create(RMMODEL));
+    options.addOption(OptionBuilder.withArgName("float").hasArg().withDescription("queryLambda")
+        .create(QUERY_LAMBDA));
 
-			for (int qid : queueMap.keySet()) {
-				PriorityQueue<PairOfStringFloat> queue = queueMap.get(qid);
+    CommandLine cmdline;
+    CommandLineParser parser = new GnuParser();
+    try {
+      cmdline = parser.parse(options, args);
+    } catch (ParseException exp) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      System.err.println("Error parsing command line: " + exp.getMessage());
+      return -1;
+    }
 
-				if (queue.size() == 0) {
-					continue;
-				}
+    if (!cmdline.hasOption(DOCVECTOR_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(QUERIES_OPTION)
+        || !cmdline.hasOption(SMOOTHING) || !cmdline.hasOption(TOPK)
+        || !cmdline.hasOption(QUERY_LAMBDA)
+        || !cmdline.hasOption(PREPROCESSING)) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      return -1;
+    }
 
-				List<PairOfStringFloat> orderedList = new ArrayList<PairOfStringFloat>();
-				while (queue.size() > 0) {
-					orderedList.add(queue.remove());
-				}
+    String docvector = cmdline.getOptionValue(DOCVECTOR_OPTION);
+    String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
+    String queries = cmdline.getOptionValue(QUERIES_OPTION);
+    String smoothing = cmdline.getOptionValue(SMOOTHING);
+    String topk = cmdline.getOptionValue(TOPK);
+    String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String rmmodel = cmdline.getOptionValue(RMMODEL);
+    String queryLambda = cmdline.getOptionValue(QUERY_LAMBDA);
 
-				for (int i = orderedList.size(); i > 0; i--) {
-					PairOfStringFloat p = orderedList.get(i - 1);
-					valueOut.set(qid + " Q0 " + p.getLeftElement() + " "
-							+ (orderedList.size() - i + 1) + " "
-							+ p.getRightElement() + " lmretrieval");
-					context.write(nullKey, valueOut);
-				}
-			}
-		}
-	}
+    LOG.info("Tool name: " + RMRetrieval.class.getSimpleName());
+    LOG.info(" - docvector: " + docvector);
+    LOG.info(" - output: " + output);
+    LOG.info(" - dictionary: " + dictionary);
+    LOG.info(" - queries: " + queries);
+    LOG.info(" - smoothing: " + smoothing);
+    LOG.info(" - topk: " + topk);
+    LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - rmmodel: " + rmmodel);
+    LOG.info(" - queryLambda: " + queryLambda);
 
-	public static final String DOCVECTOR_OPTION = "docvector";
-	public static final String OUTPUT_OPTION = "output";
-	public static final String DICTIONARY_OPTION = "dictionary";
-	public static final String QUERIES_OPTION = "queries";
-	public static final String SMOOTHING = "smoothing";
-	public static final String TOPK = "topk";
-	public static final String PREPROCESSING = "preprocessing";
+    Configuration conf = getConf();
+    conf.set(DICTIONARY_OPTION, dictionary);
+    conf.set(QUERIES_OPTION, queries);
+    conf.setFloat(SMOOTHING, Float.parseFloat(smoothing));
+    conf.setInt(TOPK, Integer.parseInt(topk));
+    conf.set(PREPROCESSING, preprocessing);
+    conf.set(RMMODEL, rmmodel);
+    conf.setFloat(QUERY_LAMBDA, Float.parseFloat(queryLambda));
 
-	/**
-	 * Runs this tool.
-	 */
-	@SuppressWarnings({ "static-access", "deprecation" })
-	public int run(String[] args) throws Exception {
-		Options options = new Options();
+    conf.set("mapreduce.map.memory.mb", "10048");
+    conf.set("mapreduce.map.java.opts", "-Xmx10048m");
+    conf.set("mapreduce.reduce.memory.mb", "10048");
+    conf.set("mapreduce.reduce.java.opts", "-Xmx10048m");
+    conf.set("mapred.task.timeout", "6000000");// default is 600000
 
-		options.addOption(OptionBuilder
-				.withArgName("path")
-				.hasArg()
-				.withDescription(
-						"input path (pfor format expected, add * to retrieve files)")
-				.create(DOCVECTOR_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("output path").create(OUTPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("dictionary").create(DICTIONARY_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("queries").create(QUERIES_OPTION));
-		options.addOption(OptionBuilder.withArgName("float").hasArg()
-				.withDescription("smoothing").create(SMOOTHING));
-		options.addOption(OptionBuilder.withArgName("int").hasArg()
-				.withDescription("topk").create(TOPK));
-		options.addOption(OptionBuilder.withArgName("string "+AnalyzerFactory.getOptions()).hasArg()
-				.withDescription("preprocessing").create(PREPROCESSING));
+    FileSystem fs = FileSystem.get(conf);
+    if (fs.exists(new Path(output)))
+      fs.delete(new Path(output));
 
+    Job job = new Job(conf, RMRetrieval.class.getSimpleName() + ":" + docvector);
+    job.setJarByClass(RMRetrieval.class);
 
-		CommandLine cmdline;
-		CommandLineParser parser = new GnuParser();
-		try {
-			cmdline = parser.parse(options, args);
-		} catch (ParseException exp) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			System.err.println("Error parsing command line: "
-					+ exp.getMessage());
-			return -1;
-		}
+    FileInputFormat.setInputPaths(job, docvector);
+    FileOutputFormat.setOutputPath(job, new Path(output));
 
-		if (!cmdline.hasOption(DOCVECTOR_OPTION)
-				|| !cmdline.hasOption(OUTPUT_OPTION)
-				|| !cmdline.hasOption(DICTIONARY_OPTION)
-				|| !cmdline.hasOption(QUERIES_OPTION)
-				|| !cmdline.hasOption(SMOOTHING) 
-				|| !cmdline.hasOption(TOPK)
-				|| !cmdline.hasOption(PREPROCESSING)) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			return -1;
-		}
+    job.setInputFormatClass(SequenceFileInputFormat.class);
 
-		String docvector = cmdline.getOptionValue(DOCVECTOR_OPTION);
-		String output = cmdline.getOptionValue(OUTPUT_OPTION);
-		String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
-		String queries = cmdline.getOptionValue(QUERIES_OPTION);
-		String smoothing = cmdline.getOptionValue(SMOOTHING);
-		String topk = cmdline.getOptionValue(TOPK);
-		String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    job.setMapOutputKeyClass(PairOfIntString.class);
+    job.setMapOutputValueClass(FloatWritable.class);
+    job.setOutputKeyClass(NullWritable.class);
+    job.setOutputValueClass(Text.class);
 
-		LOG.info("Tool name: " + RMRetrieval.class.getSimpleName());
-		LOG.info(" - docvector: " + docvector);
-		LOG.info(" - output: " + output);
-		LOG.info(" - dictionary: " + dictionary);
-		LOG.info(" - queries: " + queries);
-		LOG.info(" - smoothing: " + smoothing);
-		LOG.info(" - topk: " + topk);
-		LOG.info(" - preprocessing: "+preprocessing);
+    job.setMapperClass(MyMapper.class);
+    job.setPartitionerClass(MyPartitioner.class);
+    job.setReducerClass(MyReducer.class);
 
-		Configuration conf = getConf();
-		conf.set(DICTIONARY_OPTION, dictionary);
-		conf.set(QUERIES_OPTION, queries);
-		conf.setFloat(SMOOTHING, Float.parseFloat(smoothing));
-		conf.setInt(TOPK, Integer.parseInt(topk));
-		conf.set(PREPROCESSING,preprocessing);
+    long startTime = System.currentTimeMillis();
+    job.waitForCompletion(true);
+    LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
+    return 0;
+  }
 
-		conf.set("mapreduce.map.memory.mb", "10048");
-		conf.set("mapreduce.map.java.opts", "-Xmx10048m");
-		conf.set("mapreduce.reduce.memory.mb", "10048");
-		conf.set("mapreduce.reduce.java.opts", "-Xmx10048m");
-		conf.set("mapred.task.timeout", "6000000");// default is 600000
-
-		FileSystem fs = FileSystem.get(conf);
-		if (fs.exists(new Path(output)))
-			fs.delete(new Path(output));
-
-		Job job = new Job(conf, RMRetrieval.class.getSimpleName() + ":"
-				+ docvector);
-		job.setJarByClass(RMRetrieval.class);
-
-		FileInputFormat.setInputPaths(job, docvector);
-		FileOutputFormat.setOutputPath(job, new Path(output));
-
-		job.setInputFormatClass(SequenceFileInputFormat.class);
-
-		job.setMapOutputKeyClass(PairOfIntString.class);
-		job.setMapOutputValueClass(FloatWritable.class);
-		job.setOutputKeyClass(NullWritable.class);
-		job.setOutputValueClass(Text.class);
-
-		job.setMapperClass(MyMapper.class);
-		job.setPartitionerClass(MyPartitioner.class);
-		job.setReducerClass(MyReducer.class);
-
-		long startTime = System.currentTimeMillis();
-		job.waitForCompletion(true);
-		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
-				/ 1000.0 + " seconds");
-		return 0;
-	}
-
-	/**
-	 * Dispatches command-line arguments to the tool via the
-	 * <code>ToolRunner</code>.
-	 */
-	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + RMRetrieval.class.getCanonicalName()
-				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new RMRetrieval(), args);
-	}
+  /**
+   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
+   */
+  public static void main(String[] args) throws Exception {
+    LOG.info("Running " + RMRetrieval.class.getCanonicalName() + " with args "
+        + Arrays.toString(args));
+    ToolRunner.run(new RMRetrieval(), args);
+  }
 }
