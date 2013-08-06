@@ -14,7 +14,7 @@
  * permissions and limitations under the License.
  */
 
-/**
+/*
  * Container for a generic Warc Record 
  * 
  * (C) 2009 - Carnegie Mellon University
@@ -48,7 +48,7 @@
  * @author mhoy@cs.cmu.edu (Mark J. Hoy)
  */
 
-package org.clueweb.data;
+package org.clueweb.clueweb12;
 
 import java.io.DataInput;
 import java.io.DataInputStream;
@@ -61,7 +61,9 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.Map.Entry;
 
-public class ClueWarcRecord extends Indexable {
+import org.clueweb.data.Indexable;
+
+public class ClueWeb12WarcRecord extends Indexable {
 
   public static String WARC_VERSION = "WARC/1.0";
   public static String WARC_VERSION_LINE = "WARC/1.0\n";
@@ -264,7 +266,7 @@ public class ClueWarcRecord extends Indexable {
    * @return a WARC record (or null if eof)
    * @throws java.io.IOException
    */
-  public static ClueWarcRecord readNextWarcRecord(DataInputStream in)
+  public static ClueWeb12WarcRecord readNextWarcRecord(DataInputStream in)
       throws IOException {
     StringBuffer recordHeader = new StringBuffer();
     byte[] recordContent = readNextRecord(in, recordHeader);
@@ -276,7 +278,7 @@ public class ClueWarcRecord extends Indexable {
     String thisHeaderString = recordHeader.toString();
     String[] headerLines = thisHeaderString.split(NEWLINE);
 
-    ClueWarcRecord retRecord = new ClueWarcRecord();
+    ClueWeb12WarcRecord retRecord = new ClueWeb12WarcRecord();
     for (int i = 0; i < headerLines.length; i++) {
       String[] pieces = headerLines[i].split(":", 2);
       if (pieces.length != 2) {
@@ -418,7 +420,7 @@ public class ClueWarcRecord extends Indexable {
   /**
    * Default Constructor
    */
-  public ClueWarcRecord() {
+  public ClueWeb12WarcRecord() {
   }
 
   /**
@@ -426,7 +428,7 @@ public class ClueWarcRecord extends Indexable {
    * 
    * @param o
    */
-  public ClueWarcRecord(ClueWarcRecord o) {
+  public ClueWeb12WarcRecord(ClueWeb12WarcRecord o) {
     this.warcHeader = new WarcHeader(o.warcHeader);
     this.warcContent = o.warcContent;
   }
@@ -447,7 +449,7 @@ public class ClueWarcRecord extends Indexable {
    * @param o
    *            record to copy from
    */
-  public void set(ClueWarcRecord o) {
+  public void set(ClueWeb12WarcRecord o) {
     this.warcHeader = new WarcHeader(o.warcHeader);
     this.warcContent = o.warcContent;
   }

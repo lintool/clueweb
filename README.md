@@ -3,6 +3,8 @@ ClueWeb Tools
 
 Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
 
+Sign up to the mailing list at [the clueweb-list@cwi.nl mailman page](https://lists.cwi.nl/mailman/listinfo/clueweb-list).
+
 Getting Stated
 --------------
 
