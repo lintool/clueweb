@@ -172,6 +172,10 @@ public class RMModel extends Configured implements Tool {
 			if(topRankedDocs.contains(key.toString())==false) {
 			  return;
 			}
+			
+			if(DOC.getLength()<10) {
+			  return;
+			}
 
 			// tfMap of the document
 			HashMap<Integer, Integer> tfMap = Maps.newHashMap();

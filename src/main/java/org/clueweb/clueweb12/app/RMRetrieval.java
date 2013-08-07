@@ -118,7 +118,7 @@ public class RMRetrieval extends Configured implements Tool {
    */
   private static class RelLM {
     public int qid;
-    private HashMap<Integer, Double> probMap;
+    public HashMap<Integer, Double> probMap;
 
     public RelLM(int qid) {
       this.qid = qid;
@@ -148,6 +148,8 @@ public class RMRetrieval extends Configured implements Tool {
       }
       return probMap.get(termid);
     }
+    
+    
   }
 
   /*
@@ -179,7 +181,6 @@ public class RMRetrieval extends Configured implements Tool {
       String path = context.getConfiguration().get(DICTIONARY_OPTION);
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
       stats = new TermStatistics(new Path(path), fs);
-      interestingTerms = Sets.newHashSet();
 
       smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
       LOG.info("Smoothing set to " + smoothingParam);
@@ -210,7 +211,6 @@ public class RMRetrieval extends Configured implements Tool {
           relLMMap.put(qid, rellm);
         }
         rellm.addTerm(dictionary.getId(term), weight);
-        interestingTerms.add(dictionary.getId(term));
       }
 
       br.close();
@@ -245,7 +245,6 @@ public class RMRetrieval extends Configured implements Tool {
           int termid = dictionary.getId(term);
           if(termid>0) {
             termSet.add(termid);
-            interestingTerms.add(termid);
           }
         }
         
@@ -253,19 +252,19 @@ public class RMRetrieval extends Configured implements Tool {
           continue;
         }
         
-        double termWeight = 1.0/(double)termSet.size();
-        for(int termid : termSet) {
-          RelLM rellm = null;
-          if(relLMMap.containsKey(qid)) {
-            rellm = relLMMap.get(qid);
-          }
-          else {
-            rellm = new RelLM(qid);
-            relLMMap.put(qid, rellm);
-          }
-          rellm.interpolateWithQueryTerm(termid, termWeight, queryLambda);
+        RelLM rellm = null;
+        if(relLMMap.containsKey(qid)) {
+          rellm = relLMMap.get(qid);
+        }
+        else {
+          rellm = new RelLM(qid);
+          relLMMap.put(qid, rellm);
         }
         
+        double termWeight = 1.0/(double)termSet.size();
+        for(int termid : termSet) {
+          rellm.interpolateWithQueryTerm(termid, termWeight, queryLambda);
+        }
       }
       br.close();
       fsin.close();
@@ -286,20 +285,19 @@ public class RMRetrieval extends Configured implements Tool {
         tfMap.put(termid, tf);
       }
       
-      //for each term
-      for(int termid : tfMap.keySet()) {
+      //for each query
+      for(int qid : relLMMap.keySet()) {
+        RelLM rellm = relLMMap.get(qid);
         
-        if(interestingTerms.contains(termid)==false) {
-          continue;
-        }
+        double rsv = 0.0;
         
-        double tf = tfMap.get(termid);
-        
-        //for each query
-        for(int qid : relLMMap.keySet()) {
-          RelLM rellm = relLMMap.get(qid);
-          if(rellm.containsTerm(termid)==false) {
-            continue;
+        //for each term in the relevance LM
+        for(int termid : rellm.probMap.keySet()) {
+          double pwq = rellm.getWeight(termid);
+          
+          double tf = 0.0;
+          if(tfMap.containsKey(termid)) {
+            tf = tfMap.get(termid);
           }
           
           double df = stats.getDf(termid);
@@ -318,13 +316,12 @@ public class RMRetrieval extends Configured implements Tool {
                 / (double) (DOC.getLength() + smoothingParam);
           }
           
-          double pwr = rellm.getWeight(termid);          
-          double score = pwr * Math.log(pwr/pwd);
-          
-          keyOut.set(qid, key.toString());
-          valueOut.set((float)score);
-          context.write(keyOut, valueOut);
+          rsv += pwq * Math.log(pwq/pwd);
         }
+        
+        keyOut.set(qid, key.toString());//qid,docid
+        valueOut.set((float)rsv);
+        context.write(keyOut,valueOut);
       }
     }
   }
@@ -360,6 +357,7 @@ public class RMRetrieval extends Configured implements Tool {
         queueMap.put(qid, queue);
       }
 
+      //should only contain 1 value
       float scoreSum = 0f;
       for (FloatWritable v : values) {
         scoreSum += v.get();

@@ -397,7 +397,7 @@ public class DuplicateFiltering extends Configured implements Tool {
 		LOG.info(" - trecinputfile: " + trecinput);
 		LOG.info(" - output: " + output);
 		LOG.info(" - dictionary: " + dictionary);
-		LOG.info(" - cosine similarity threshold: " + SIM_THRESHOLD);
+		LOG.info(" - cosine similarity threshold: " + simThreshold);
 		LOG.info(" - topk: " + topk);
 
 		Configuration conf = getConf();
