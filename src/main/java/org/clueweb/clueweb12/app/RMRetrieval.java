@@ -318,8 +318,7 @@ public class RMRetrieval extends Configured implements Tool {
                 / (double) (DOC.getLength() + smoothingParam);
           }
           
-          double pwr = rellm.getWeight(termid);
-          
+          double pwr = rellm.getWeight(termid);          
           double score = pwr * Math.log(pwr/pwd);
           
           keyOut.set(qid, key.toString());
@@ -361,7 +360,6 @@ public class RMRetrieval extends Configured implements Tool {
         queueMap.put(qid, queue);
       }
 
-      // actually, it should only be a single element
       float scoreSum = 0f;
       for (FloatWritable v : values) {
         scoreSum += v.get();
