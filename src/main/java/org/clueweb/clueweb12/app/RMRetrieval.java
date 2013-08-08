@@ -329,7 +329,7 @@ public class RMRetrieval extends Configured implements Tool {
           rsv += pwq * Math.log(pwq/pwd);
         }
         
-        rsv = -1 * rsv;
+        rsv = -1 * rsv;//the lower the KL divergence between relLM and docLM, the better
         
         if(occurringTerms>0) {
           keyOut.set(qid, key.toString());//qid,docid
