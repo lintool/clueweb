@@ -43,14 +43,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.Set;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -77,11 +74,9 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
 import org.clueweb.util.PairOfStringFloatComparator;
 
@@ -167,7 +162,6 @@ public class RMRetrieval extends Configured implements Tool {
     private static Analyzer ANALYZER;
     
     private static HashMap<Integer, RelLM> relLMMap;
-    private static HashSet<Integer> interestingTerms;
 
     // complex key: (qid,docid)
     private static final PairOfIntString keyOut = new PairOfIntString();
@@ -268,6 +262,16 @@ public class RMRetrieval extends Configured implements Tool {
       }
       br.close();
       fsin.close();
+      
+      for(int qid : relLMMap.keySet())
+      {
+        LOG.info("++++ relevance LM qid="+qid+"++++++");
+        HashMap<Integer, Double> probMap = relLMMap.get(qid).probMap;
+        for(int termid : probMap.keySet()) {
+          LOG.info("termid "+termid+" => "+probMap.get(termid));
+        }
+        LOG.info("+++++++++");
+      }
     }
 
     @Override
@@ -287,10 +291,12 @@ public class RMRetrieval extends Configured implements Tool {
       
       //for each query
       for(int qid : relLMMap.keySet()) {
+        
         RelLM rellm = relLMMap.get(qid);
         
         double rsv = 0.0;
         
+        int occurringTerms = 0;
         //for each term in the relevance LM
         for(int termid : rellm.probMap.keySet()) {
           double pwq = rellm.getWeight(termid);
@@ -298,6 +304,10 @@ public class RMRetrieval extends Configured implements Tool {
           double tf = 0.0;
           if(tfMap.containsKey(termid)) {
             tf = tfMap.get(termid);
+          }
+          
+          if(tf>0) {
+            occurringTerms++;
           }
           
           double df = stats.getDf(termid);
@@ -319,9 +329,13 @@ public class RMRetrieval extends Configured implements Tool {
           rsv += pwq * Math.log(pwq/pwd);
         }
         
-        keyOut.set(qid, key.toString());//qid,docid
-        valueOut.set((float)rsv);
-        context.write(keyOut,valueOut);
+        rsv = -1 * rsv;
+        
+        if(occurringTerms>0) {
+          keyOut.set(qid, key.toString());//qid,docid
+          valueOut.set((float)rsv);
+          context.write(keyOut,valueOut);
+        }
       }
     }
   }
