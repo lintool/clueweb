@@ -74,6 +74,7 @@ import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.dictionary.PorterAnalyzer;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.HTMLParserFactory;
 import org.jsoup.Jsoup;
 import org.mortbay.log.Log;
 
@@ -84,190 +85,190 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 public class DocumentExtractor extends Configured implements Tool {
-	private static final Logger LOG = Logger
-			.getLogger(DocumentExtractor.class);
-	
-	private static enum Records {
-		DOCUMENTS_FOUND, JSOUP_EXCEPTIONS
-	};
+  private static final Logger LOG = Logger.getLogger(DocumentExtractor.class);
 
-	private static boolean keepHTML;
-	private static final HashMap<String,String> docidMap = Maps.newHashMap();
-	private static final String EMPTY = "";
+  private static enum Records {
+    DOCUMENTS_FOUND, HTML_PARSER_EXCEPTIONS
+  };
 
-	private static class MyMapper extends
-			Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
-		
-		@Override
-		public void setup(Context context) throws IOException {
+  private static boolean keepHTML;
+  private static String htmlParser;
+  private static final HashMap<String, String> docidMap = Maps.newHashMap();
+  private static final String EMPTY = "";
 
-			FileSystem fs = FileSystem.get(context.getConfiguration());	
-			FSDataInputStream fsin = fs.open(new Path(context
-					.getConfiguration().get(DOCIDS_FILE)));
-			
-			keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
-			LOG.info("keephtml is set to "+keepHTML);
-			
-			BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-			String line;
-			while ((line = br.readLine()) != null) {
-				if(line.length()>5) {
-					docidMap.put(line,EMPTY);
-				}
-			}
-			fsin.close();
-			br.close();
-			
-			LOG.info("Number of docids read from "+context.getConfiguration().get(DOCIDS_FILE)+": "+docidMap.size());
-		}
+  private static class MyMapper extends
+      Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
+    @Override
+    public void setup(Context context) throws IOException {
 
-		@Override
-		public void map(LongWritable key, ClueWeb12WarcRecord doc,
-				Context context) throws IOException, InterruptedException {
+      FileSystem fs = FileSystem.get(context.getConfiguration());
+      FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(DOCIDS_FILE)));
 
-			String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
-			if (docid != null && docidMap.containsKey(docid)) {
-				try {
+      keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
+      LOG.info("keephtml is set to " + keepHTML);
 
-					if(!keepHTML) {
-						docidMap.put(docid, Jsoup.parse(doc.getContent()).text());
-					}
-					else {
-						docidMap.put(docid, doc.getContent());
-					}
-					context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
-				} catch (Exception e) {
-					// If Jsoup throws any exceptions, catch and move on.
-					LOG.info("Error caught processing " + docid);
-					context.getCounter(Records.JSOUP_EXCEPTIONS).increment(1);
-				}
-			}
-		}
-		
-		@Override
-		public void cleanup(Context context) throws IOException {
+      if (keepHTML) {
+        htmlParser = context.getConfiguration().get(HTML_PARSER);
+      }
 
-			FileSystem fs = FileSystem.get(context.getConfiguration());	
-			String outputFolder = context.getConfiguration().get(OUTPUT_OPTION);
-			if(!outputFolder.endsWith(File.separator))
-				outputFolder += File.separator;
-			
-			for(String docid : docidMap.keySet())
-			{
-				if(docidMap.get(docid).equals(EMPTY)) {
-					continue;
-				}
-				
-				Path p = new Path(outputFolder+docid);
-				FSDataOutputStream fsout = fs.create(p);
-				BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
-				bw.write(docidMap.get(docid));
-				bw.close();
-				fsout.close();
-				
-				LOG.info("Written document content to "+p.toString());
-			}
-		}
-	}
+      BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
+      String line;
+      while ((line = br.readLine()) != null) {
+        if (line.length() > 5) {
+          docidMap.put(line, EMPTY);
+        }
+      }
+      fsin.close();
+      br.close();
 
+      LOG.info("Number of docids read from " + context.getConfiguration().get(DOCIDS_FILE) + ": "
+          + docidMap.size());
+    }
 
-	public static final String INPUT_OPTION = "input";
-	public static final String OUTPUT_OPTION = "output";
-	public static final String DOCIDS_FILE = "docidsfile";
-	public static final String KEEP_HTML = "keephtml";
+    @Override
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
 
-	/**
-	 * Runs this tool.
-	 */
-	@SuppressWarnings("static-access")
-	public int run(String[] args) throws Exception {
-		Options options = new Options();
+      String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
+      if (docid != null && docidMap.containsKey(docid)) {
+        try {
 
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("input path").create(INPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("output path").create(OUTPUT_OPTION));
-		options.addOption(OptionBuilder.withArgName("path").hasArg()
-				.withDescription("docids file path").create(DOCIDS_FILE));
-		options.addOption(OptionBuilder.withArgName("true|false").hasArg()
-				.withDescription("keep HTML").create(KEEP_HTML));
+          if (!keepHTML) {
+            docidMap.put(docid, HTMLParserFactory.parse(htmlParser, doc.getContent()));
+          } else {
+            docidMap.put(docid, doc.getContent());
+          }
+          context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
+        } catch (Exception e) {
+          // If Jsoup throws any exceptions, catch and move on.
+          LOG.info("Error caught processing " + docid);
+          context.getCounter(Records.HTML_PARSER_EXCEPTIONS).increment(1);
+        }
+      }
+    }
 
-		CommandLine cmdline;
-		CommandLineParser parser = new GnuParser();
-		try {
-			cmdline = parser.parse(options, args);
-		} catch (ParseException exp) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			System.err.println("Error parsing command line: "
-					+ exp.getMessage());
-			return -1;
-		}
+    @Override
+    public void cleanup(Context context) throws IOException {
 
-		if (!cmdline.hasOption(INPUT_OPTION)
-				|| !cmdline.hasOption(OUTPUT_OPTION)
-				|| !cmdline.hasOption(DOCIDS_FILE)
-				|| !cmdline.hasOption(KEEP_HTML)) {
-			HelpFormatter formatter = new HelpFormatter();
-			formatter.printHelp(this.getClass().getName(), options);
-			ToolRunner.printGenericCommandUsage(System.out);
-			return -1;
-		}
+      FileSystem fs = FileSystem.get(context.getConfiguration());
+      String outputFolder = context.getConfiguration().get(OUTPUT_OPTION);
+      if (!outputFolder.endsWith(File.separator))
+        outputFolder += File.separator;
 
-		String input = cmdline.getOptionValue(INPUT_OPTION);
-		String output = cmdline.getOptionValue(OUTPUT_OPTION);
-		String docidsfile = cmdline.getOptionValue(DOCIDS_FILE);
-		boolean keephtml = (cmdline.getOptionValue(KEEP_HTML).equals("true"))?true:false;
+      for (String docid : docidMap.keySet()) {
+        if (docidMap.get(docid).equals(EMPTY)) {
+          continue;
+        }
 
-		LOG.info("Tool name: " + DocumentExtractor.class.getSimpleName());
-		LOG.info(" - input: " + input);
-		LOG.info(" - output: " + output);
-		LOG.info(" - docidsfile: "+docidsfile);
-		Log.info(" - keephtml: "+keephtml);
+        Path p = new Path(outputFolder + docid);
+        FSDataOutputStream fsout = fs.create(p);
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
+        bw.write(docidMap.get(docid));
+        bw.close();
+        fsout.close();
 
-		Configuration conf = getConf();
-		conf.set(DOCIDS_FILE, docidsfile);
-		conf.setBoolean(KEEP_HTML,keephtml);
-		conf.set(OUTPUT_OPTION, output);
-		
-		Job job = new Job(getConf(),
-				DocumentExtractor.class.getSimpleName() + ":" + input);
-		job.setJarByClass(DocumentExtractor.class);
+        LOG.info("Written document content to " + p.toString());
+      }
+    }
+  }
 
-		FileInputFormat.setInputPaths(job, input);
-		
-		job.setInputFormatClass(ClueWeb12InputFormat.class);
-		job.setOutputFormatClass(NullOutputFormat.class);
+  public static final String INPUT_OPTION = "input";
+  public static final String OUTPUT_OPTION = "output";
+  public static final String DOCIDS_FILE = "docidsfile";
+  public static final String KEEP_HTML = "keephtml";
+  public static final String HTML_PARSER = "htmlParser";
 
-		job.setMapOutputKeyClass(NullWritable.class);
-		job.setMapOutputValueClass(NullWritable.class);
+  /**
+   * Runs this tool.
+   */
+  @SuppressWarnings("static-access")
+  public int run(String[] args) throws Exception {
+    Options options = new Options();
 
-		job.setMapperClass(MyMapper.class);
-		job.setNumReduceTasks(0);
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg()
+        .withDescription("docids file path").create(DOCIDS_FILE));
+    options.addOption(OptionBuilder.withArgName("true|false").hasArg().withDescription("keep HTML")
+        .create(KEEP_HTML));
+    options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
+        .hasArg().withDescription("htmlParser").create(HTML_PARSER));
 
-		long startTime = System.currentTimeMillis();
-		job.waitForCompletion(true);
-		LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime)
-				/ 1000.0 + " seconds");
-		
-		int numDocsFound = (int) job.getCounters().findCounter(Records.DOCUMENTS_FOUND).getValue();
-		LOG.info("Number of documents found: "+numDocsFound);
-		
-		int numExceptions = (int) job.getCounters().findCounter(Records.JSOUP_EXCEPTIONS).getValue();
-		LOG.info("Number of Jsoup exceptions: "+numExceptions);
+    CommandLine cmdline;
+    CommandLineParser parser = new GnuParser();
+    try {
+      cmdline = parser.parse(options, args);
+    } catch (ParseException exp) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      System.err.println("Error parsing command line: " + exp.getMessage());
+      return -1;
+    }
 
-		return 0;
-	}
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DOCIDS_FILE) || !cmdline.hasOption(KEEP_HTML)) {
+      HelpFormatter formatter = new HelpFormatter();
+      formatter.printHelp(this.getClass().getName(), options);
+      ToolRunner.printGenericCommandUsage(System.out);
+      return -1;
+    }
 
-	/**
-	 * Dispatches command-line arguments to the tool via the
-	 * <code>ToolRunner</code>.
-	 */
-	public static void main(String[] args) throws Exception {
-		LOG.info("Running " + DocumentExtractor.class.getCanonicalName()
-				+ " with args " + Arrays.toString(args));
-		ToolRunner.run(new DocumentExtractor(), args);
-	}
+    String input = cmdline.getOptionValue(INPUT_OPTION);
+    String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    String docidsfile = cmdline.getOptionValue(DOCIDS_FILE);
+    boolean keephtml = (cmdline.getOptionValue(KEEP_HTML).equals("true")) ? true : false;
+    String htmlParser = (keephtml == true) ? cmdline.getOptionValue(HTML_PARSER) : "";
+
+    LOG.info("Tool name: " + DocumentExtractor.class.getSimpleName());
+    LOG.info(" - input: " + input);
+    LOG.info(" - output: " + output);
+    LOG.info(" - docidsfile: " + docidsfile);
+    Log.info(" - keephtml: " + keephtml);
+
+    Configuration conf = getConf();
+    conf.set(DOCIDS_FILE, docidsfile);
+    conf.setBoolean(KEEP_HTML, keephtml);
+    conf.set(OUTPUT_OPTION, output);
+    conf.set(HTML_PARSER, htmlParser);
+
+    Job job = new Job(getConf(), DocumentExtractor.class.getSimpleName() + ":" + input);
+    job.setJarByClass(DocumentExtractor.class);
+
+    FileInputFormat.setInputPaths(job, input);
+
+    job.setInputFormatClass(ClueWeb12InputFormat.class);
+    job.setOutputFormatClass(NullOutputFormat.class);
+
+    job.setMapOutputKeyClass(NullWritable.class);
+    job.setMapOutputValueClass(NullWritable.class);
+
+    job.setMapperClass(MyMapper.class);
+    job.setNumReduceTasks(0);
+
+    long startTime = System.currentTimeMillis();
+    job.waitForCompletion(true);
+    LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
+
+    int numDocsFound = (int) job.getCounters().findCounter(Records.DOCUMENTS_FOUND).getValue();
+    LOG.info("Number of documents found: " + numDocsFound);
+
+    int numExceptions = (int) job.getCounters().findCounter(Records.HTML_PARSER_EXCEPTIONS)
+        .getValue();
+    LOG.info("Number of HTML parser exceptions: " + numExceptions);
+
+    return 0;
+  }
+
+  /**
+   * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
+   */
+  public static void main(String[] args) throws Exception {
+    LOG.info("Running " + DocumentExtractor.class.getCanonicalName() + " with args "
+        + Arrays.toString(args));
+    ToolRunner.run(new DocumentExtractor(), args);
+  }
 }
