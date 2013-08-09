@@ -4,29 +4,30 @@ ClueWeb Tools (Fork) - Retrieval models
 The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). This repository focuses on additional apps (for retrieval, spam filtering, duplicate filtering, etc.)
 
 
-Differences to the original lintool/clueweb repository
-------------------------------------------------------
+Important Notes
+---------------
 + The apps `BuildPForDocVectors`, `BuildVByteDocVectors` and `ComputeTermStatistics` require an additional parameter: `htmlParser` which can either be `tika` or `jsoup` (changes the HTML parser used).
-
++ The parameters `htmlParser` and `preprocessing` need to be the same during the creation of the dictionary and document vectors and the retrieval apps (otherwise the results will be poor).
 
 
 Retrieval
 ---------
 
-Implemented is currently the basic language modeling approach to IR; smoothing types are linear interpolation and Dirichlet.
+Implemented are currently the basic language modeling approach to IR and its pseudo-relevance feedback component (relevance language models RM1/RM3).
+The implemented smoothing types are linear interpolation and Dirichlet.
 
 To run the code first follow the installation guideline of the original [clueweb repository]((https://github.com/lintool/clueweb) and build the dictionary and document vectors as described.
 
-To conduct a retrieval run, call:
+To conduct a query likelihood retrieval run, call:
 
 ```
 $ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	org.clueweb.clueweb12.app.LMRetrieval \
 	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
 	-smoothing 1000 \
 	-output /user/chauff/res.dir1000 \
 	-queries /user/chauff/web.queries.trec2013 \
-	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
 	-topk 1000 \
 	-preprocessing porter
 ``` 
@@ -38,7 +39,57 @@ The parameters are:
 + `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
 + `docvector`: HDFS path to the document vectors (PFor format) created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
 + `topk`: number of results that should be returned per query (default is 1000)
-+ `preprocessing`: indicates the tokenizaton/stemming procedure; either `porter`, `krovetz` or `standard` at the moment; needs to be in line with the dictionary/docvector
++ `preprocessing`: indicates the stemming procedure; either `porter`, `krovetz` or `standard` (no stemming)
+
+
+To create a RM1/RM3 retrieval run, two steps are necessary: 
++ first, an updated query model is created (derived from the top ranked documents of the query likelihood run)
++ the updated query model is used for retrieval
+
+The call to create the query model based on the initially top ranked documents is as follows:
+```
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.RMModel \
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-smoothing 1000 \
+	-output /user/chauff/rmmodel \
+	-trecinputfile /user/chauff/res.dir1000 \
+	-numFeedbackDocs 10 \
+	-numFeedbackTerms 10 \
+``` 
+
+The additional parameters are:
++ `trecinputfile`: the result file generated in the query likelihood run
++ `numFeedbackDocs`: the number of top ranked documents per query that are used to compute the updated query model
++ `numFeedbackTerms`: the number of terms retained in the query model
+
+The `output` file of the app contains the query model and has the format `[queryID] [term] [weight]`:
+```
+201	boards	0.011376762
+201	video	0.0120078195
+```
+
+In the second step, the query model is interpolated with the original query:
+```
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.RMRetrieval \
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-smoothing 1000 \
+	-topk 1000 \
+	-preprocessing porter \
+	-rmmodel /user/chauff/rmmodel \
+	-queries /user/chauff/web.queries.trec2013 \
+	-queryLambda 0.6 \
+	-output /user/chauff/res.rm.dir1000
+``` 
+
+The additional parameters are:
++ `rmmodel`: the file generated in the first step
++ `queryLambda`: how to interpolate the query model with the original query (if set to 0, the language model type is RM1, otherwise RM3)
++ `output`: the result file in TREC format
+
 
 
 Spam Filter
