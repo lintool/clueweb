@@ -18,6 +18,7 @@ package org.clueweb.clueweb12.app;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Random;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -42,11 +43,13 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 import org.clueweb.data.PForDocVector;
+import org.clueweb.data.WarcTrecIdMapping;
 
 import tl.lin.data.array.IntArrayWritable;
 
 public class DumpDocVectorsToRelations extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DumpDocVectorsToRelations.class);
+  private static final Random RANDOM = new Random();
 
   private static enum Records { DOCS, TERMS };
 
@@ -55,7 +58,7 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
 
     private FSDataOutputStream docsOut;
     private FSDataOutputStream termsOut;
-    private int cnt = 0;
+    private WarcTrecIdMapping mapping;
 
     @Override
     public void setup(Context context) throws IOException {
@@ -63,8 +66,15 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
       String basePath = context.getConfiguration().get(OUTPUT_OPTION);
       LOG.info(OUTPUT_OPTION + ": " + basePath);
 
-      termsOut = fs.create(new Path(basePath, "terms.txt"), true);
-      docsOut = fs.create(new Path(basePath, "docs.txt"), true);
+      // Hard coded path for now: 
+      mapping = new WarcTrecIdMapping(new Path("/data/private/clueweb12/derived/warc-trec-id-index-disk1/"),
+          context.getConfiguration());
+
+      int r = Math.abs(RANDOM.nextInt());
+      // Yes, there's a small chance of collision, but number of partitions will
+      // be relatively small.
+      termsOut = fs.create(new Path(basePath, "terms-" + r + ".txt"), true);
+      docsOut = fs.create(new Path(basePath, "docs-" + r + ".txt"), true);
     }
 
     @Override
@@ -73,16 +83,20 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
       IntArrayWritable ints = values.iterator().next();
       PForDocVector.fromIntArrayWritable(ints, DOC);
 
+      int docno = mapping.getDocno(key.toString());
+      if (docno < 0) {
+        throw new RuntimeException("Unknown document: " + key.toString());
+      }
+
       int pos = 0;
       for (int termid : DOC.getTermIds()) {
         context.getCounter(Records.TERMS).increment(1);
-        termsOut.writeBytes(cnt + "\t" + termid + "\t" + pos + "\n");
+        termsOut.writeBytes(docno + "\t" + termid + "\t" + pos + "\n");
         pos++;
       }
 
       context.getCounter(Records.DOCS).increment(1);
-      docsOut.writeBytes(cnt + " " + key.toString() + "\n");
-      cnt++;
+      docsOut.writeBytes(docno + " " + key.toString() + "\n");
     }
 
     @Override
@@ -95,6 +109,7 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
+  public static final String PARTITION_OPTION = "partitions";
 
   /**
    * Runs this tool.
@@ -107,6 +122,8 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
         .withDescription("input path").create(INPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg()
+        .withDescription("number of partitions").create(PARTITION_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -129,20 +146,24 @@ public class DumpDocVectorsToRelations extends Configured implements Tool {
 
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
+    int parts = cmdline.hasOption(PARTITION_OPTION) ?
+        Integer.parseInt(cmdline.getOptionValue(PARTITION_OPTION)) : 10;
 
     LOG.info("Tool name: " + DumpDocVectorsToRelations.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
+    LOG.info(" - partitions: " + parts);
 
     Job job = new Job(getConf(), DumpDocVectorsToRelations.class.getSimpleName() + ":" + input);
     job.setJarByClass(DumpDocVectorsToRelations.class);
 
-    job.setNumReduceTasks(1);
+    job.setNumReduceTasks(parts);
 
     FileInputFormat.setInputPaths(job, input);
     FileOutputFormat.setOutputPath(job, new Path(output));
 
     job.getConfiguration().set(OUTPUT_OPTION, output);
+    job.getConfiguration().set("mapred.reduce.tasks.speculative.execution", "false");
 
     job.setInputFormatClass(SequenceFileInputFormat.class);
     job.setOutputFormatClass(NullOutputFormat.class);
