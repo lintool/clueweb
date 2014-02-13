@@ -234,3 +234,7 @@ The organizer's baseline was run with Krovetz stemming, so we expect the Porter-
 | 248 | 50% | 63%   |90%|87%|
 | 249 | 0% |  2%  |0%|4%|
 | 250 | 90% | 53% |90%|57%|
+
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/chauff/clueweb/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
+
