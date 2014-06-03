@@ -17,6 +17,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -58,8 +59,6 @@ import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
-import org.clueweb.util.PairOfStringFloatComparator;
-
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
@@ -138,13 +137,13 @@ public class LMRetrieval extends Configured implements Tool {
   /*
    * Mapper outKey: (qid,docid), value: probability score
    */
-  private static class MyMapper extends
+  protected static class MyMapper extends
       Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
 
     private static final PForDocVector DOC = new PForDocVector();
     private DefaultFrequencySortedDictionary dictionary;
-    private TermStatistics stats;
-    private double smoothingParam;
+    protected TermStatistics stats;
+    protected double smoothingParam;
 
     private static Analyzer ANALYZER;
 
@@ -152,8 +151,8 @@ public class LMRetrieval extends Configured implements Tool {
      * for quick access store the queries in two hashmaps: 1. key: termid, value: list of queries in
      * which the termid occurs 2. key: qid, value: list of termids that occur in the query
      */
-    private Map<Integer, Set<Integer>> termidQuerySet;
-    private Map<Integer, Set<Integer>> queryTermidSet;
+    protected Map<Integer, Set<Integer>> termidQuerySet;
+    protected Map<Integer, Set<Integer>> queryTermidSet;
 
     // complex key: (qid,docid)
     private static final PairOfIntString keyOut = new PairOfIntString();
@@ -245,7 +244,8 @@ public class LMRetrieval extends Configured implements Tool {
       }
 
       // for each of the interesting queries, compute log(P(q|d))
-      for (int qid : queriesToDo) {
+      //for (int qid : queriesToDo) {
+      for(int qid : queryTermidSet.keySet()) {
         double score = 0.0;
 
         for (int termid : queryTermidSet.get(qid)) {

@@ -1,7 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -19,7 +17,7 @@
  * 
  * Implementation of cosine-based near-duplicate filtering: given a TREC result file as input, each document in the ranking
  * is compared with all documents ranked before it - if it has a cosine similarity > X to one of them, it is discarded as duplicate.
- * Note: similarity based on TF.IDF weighted cosine
+ * Note: similarity based on TF.IDF weighted cosine instead of shingling (TODO)
  * 
  * Approach:
  *  

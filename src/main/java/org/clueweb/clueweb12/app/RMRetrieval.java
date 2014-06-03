@@ -39,6 +39,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
@@ -111,7 +112,7 @@ public class RMRetrieval extends Configured implements Tool {
    * RM1: do not call interpolateWithQueryTerm() or use queryLambda=0.0
    * RM3: queryLambda>0
    */
-  private static class RelLM {
+  protected static class RelLM {
     public int qid;
     public HashMap<Integer, Double> probMap;
 
@@ -150,23 +151,23 @@ public class RMRetrieval extends Configured implements Tool {
   /*
    * Mapper outKey: (qid,docid), value: probability score
    */
-  private static class MyMapper extends
+  protected static class MyMapper extends
       Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
 
     private static final PForDocVector DOC = new PForDocVector();
-    private DefaultFrequencySortedDictionary dictionary;
-    private TermStatistics stats;
-    private double smoothingParam;
-    private double queryLambda;
+    protected DefaultFrequencySortedDictionary dictionary;
+    protected TermStatistics stats;
+    protected double smoothingParam;
+    protected double queryLambda;
 
     private static Analyzer ANALYZER;
     
-    private static HashMap<Integer, RelLM> relLMMap;
+    protected static HashMap<Integer, RelLM> relLMMap;
 
     // complex key: (qid,docid)
-    private static final PairOfIntString keyOut = new PairOfIntString();
+    protected static PairOfIntString keyOut = new PairOfIntString();
     // value: float; probability score log(P(q|d))
-    private static final FloatWritable valueOut = new FloatWritable();// score
+    protected static FloatWritable valueOut = new FloatWritable();// score
 
     @Override
     public void setup(Context context) throws IOException {

@@ -1,6 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -16,12 +15,12 @@
  * 
  * @author Claudia Hauff
  * 
- * Takes as input a file with docids (one per line) and writes their content to file.
+ * Takes as input a file with docids (one per line) and writes all dates found in them to file
  * 
  * MyMapper:
  * 	2.1 the docids are read from the file in setup()
  * 	2.2 all *warc.gz files are read in map() and if the right docid is hit, the content is stored
- * 	2.3 the cleanup() method writes the content of all found docids to file
+ * 	2.3 the cleanup() method writes the dates for all docids to file
  * 
  * Reducer: no reducer necessary, all work is done in MyMapper
  */
@@ -34,11 +33,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.URI;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.List;
+import java.util.Properties;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -49,69 +48,61 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
+import org.apache.hadoop.filecache.DistributedCache;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
-import org.clueweb.data.TermStatistics;
-import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.dictionary.PorterAnalyzer;
-import org.clueweb.util.AnalyzerFactory;
 import org.clueweb.util.HTMLParserFactory;
-import org.jsoup.Jsoup;
-import org.mortbay.log.Log;
-
-import tl.lin.data.pair.PairOfIntLong;
-import tl.lin.lucene.AnalyzerUtils;
-
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
+import edu.stanford.nlp.ling.CoreAnnotations;
+import edu.stanford.nlp.ling.CoreLabel;
+import edu.stanford.nlp.pipeline.Annotation;
+import edu.stanford.nlp.pipeline.AnnotationPipeline;
+import edu.stanford.nlp.pipeline.POSTaggerAnnotator;
+import edu.stanford.nlp.pipeline.PTBTokenizerAnnotator;
+import edu.stanford.nlp.pipeline.WordsToSentencesAnnotator;
+import edu.stanford.nlp.time.TimeAnnotations;
+import edu.stanford.nlp.time.TimeAnnotator;
+import edu.stanford.nlp.time.TimeExpression;
+import edu.stanford.nlp.util.CoreMap;
 
-public class DocumentExtractor extends Configured implements Tool {
-  private static final Logger LOG = Logger.getLogger(DocumentExtractor.class);
+public class DateExtractor extends Configured implements Tool {
+  private static final Logger LOG = Logger.getLogger(DateExtractor.class);
 
   private static enum Records {
-    DOCUMENTS_FOUND, HTML_PARSER_EXCEPTIONS
+    DOCUMENTS_FOUND, HTML_PARSER_EXCEPTIONS, DATES_FOUND
   };
 
-  private static boolean keepHTML;
   private static String htmlParser;
   private static final HashMap<String, String> docidMap = Maps.newHashMap();
   private static final String EMPTY = "";
 
   private static class MyMapper extends
       Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
+    
+    private Properties props;
+    private AnnotationPipeline pipeline;
+    private StringBuffer dates;
 
     @Override
     public void setup(Context context) throws IOException {
 
       FileSystem fs = FileSystem.get(context.getConfiguration());
       FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(DOCIDS_FILE)));
-
-      keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
-      LOG.info("keephtml is set to " + keepHTML);
-
-      if (keepHTML) {
-        htmlParser = context.getConfiguration().get(HTML_PARSER);
-      }
+      
+      htmlParser = context.getConfiguration().get(HTML_PARSER);
 
       BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
       String line;
@@ -125,6 +116,17 @@ public class DocumentExtractor extends Configured implements Tool {
 
       LOG.info("Number of docids read from " + context.getConfiguration().get(DOCIDS_FILE) + ": "
           + docidMap.size());
+      
+      Path[] cacheFiles = DistributedCache.getLocalCacheFiles(context.getConfiguration());
+  
+      props = new Properties();
+      pipeline = new AnnotationPipeline();
+      pipeline.addAnnotator(new PTBTokenizerAnnotator(false));
+      pipeline.addAnnotator(new WordsToSentencesAnnotator(false));
+      pipeline.addAnnotator(new POSTaggerAnnotator(cacheFiles[0].toString(),false));
+      pipeline.addAnnotator(new TimeAnnotator("sutime", props));
+      
+      dates = new StringBuffer();
     }
 
     @Override
@@ -135,11 +137,29 @@ public class DocumentExtractor extends Configured implements Tool {
       if (docid != null && docidMap.containsKey(docid)) {
         try {
 
-          if (!keepHTML) {
-            docidMap.put(docid, HTMLParserFactory.parse(htmlParser, doc.getContent()));
-          } else {
-            docidMap.put(docid, doc.getContent());
-          }
+          String[] content = HTMLParserFactory.parse(htmlParser, doc.getContent()).split("\\s\\+");
+          
+          dates.setLength(0);
+          //extract all dates
+          for (String c : content) {
+            Annotation annotation = new Annotation(c);
+            annotation.set(CoreAnnotations.DocDateAnnotation.class, "2013-07-14");
+            pipeline.annotate(annotation);
+            //System.out.println(annotation.get(CoreAnnotations.TextAnnotation.class));
+            List<CoreMap> timexAnnsAll = annotation.get(TimeAnnotations.TimexAnnotations.class);
+            for (CoreMap cm : timexAnnsAll) {
+              List<CoreLabel> tokens = cm.get(CoreAnnotations.TokensAnnotation.class);
+              
+              if(dates.length() > 0) {
+                dates.append(";");
+              }
+              dates.append(cm.get(TimeExpression.Annotation.class).getTemporal());
+              context.getCounter(Records.DATES_FOUND).increment(1);
+            }
+          }         
+          
+          docidMap.put(docid,dates.toString());
+
           context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
         } catch (Exception e) {
           // If Jsoup throws any exceptions, catch and move on.
@@ -177,8 +197,9 @@ public class DocumentExtractor extends Configured implements Tool {
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
   public static final String DOCIDS_FILE = "docidsfile";
-  public static final String KEEP_HTML = "keephtml";
   public static final String HTML_PARSER = "htmlParser";
+  public static final String POS_MODEL_JAR = "posModelJar";
+  public static final String SUT_MODEL_JAR = "sutModelJar";
 
   /**
    * Runs this tool.
@@ -193,10 +214,12 @@ public class DocumentExtractor extends Configured implements Tool {
         .create(OUTPUT_OPTION));
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("docids file path").create(DOCIDS_FILE));
-    options.addOption(OptionBuilder.withArgName("true|false").hasArg().withDescription("keep HTML")
-        .create(KEEP_HTML));
     options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
         .hasArg().withDescription("htmlParser").create(HTML_PARSER));
+    options.addOption(OptionBuilder.withArgName("posModelJar").hasArg().withDescription("Stanford POS model jar")
+        .create(POS_MODEL_JAR));
+    options.addOption(OptionBuilder.withArgName("sutModelJar").hasArg().withDescription("Stanford SU Time model jar")
+        .create(SUT_MODEL_JAR));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -211,7 +234,8 @@ public class DocumentExtractor extends Configured implements Tool {
     }
 
     if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
-        || !cmdline.hasOption(DOCIDS_FILE) || !cmdline.hasOption(KEEP_HTML)) {
+        || !cmdline.hasOption(DOCIDS_FILE) || !cmdline.hasOption(POS_MODEL_JAR)
+        || !cmdline.hasOption(SUT_MODEL_JAR)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -221,23 +245,26 @@ public class DocumentExtractor extends Configured implements Tool {
     String input = cmdline.getOptionValue(INPUT_OPTION);
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String docidsfile = cmdline.getOptionValue(DOCIDS_FILE);
-    boolean keephtml = (cmdline.getOptionValue(KEEP_HTML).equals("true")) ? true : false;
-    String htmlParser = (keephtml == true) ? cmdline.getOptionValue(HTML_PARSER) : "";
+    String htmlParser = cmdline.getOptionValue(HTML_PARSER);
+    String posModelJar = cmdline.getOptionValue(POS_MODEL_JAR);
+    String sutModelJar = cmdline.getOptionValue(SUT_MODEL_JAR);
 
-    LOG.info("Tool name: " + DocumentExtractor.class.getSimpleName());
+    LOG.info("Tool name: " + DateExtractor.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - docidsfile: " + docidsfile);
-    Log.info(" - keephtml: " + keephtml);
+    LOG.info(" - posModelJar: " + posModelJar);
+    LOG.info(" - sutModelJar: " + sutModelJar);
 
     Configuration conf = getConf();
     conf.set(DOCIDS_FILE, docidsfile);
-    conf.setBoolean(KEEP_HTML, keephtml);
     conf.set(OUTPUT_OPTION, output);
     conf.set(HTML_PARSER, htmlParser);
+    conf.set(POS_MODEL_JAR, posModelJar);
+    conf.set(SUT_MODEL_JAR, sutModelJar);
 
-    Job job = new Job(getConf(), DocumentExtractor.class.getSimpleName() + ":" + input);
-    job.setJarByClass(DocumentExtractor.class);
+    Job job = new Job(getConf(), DateExtractor.class.getSimpleName() + ":" + input);
+    job.setJarByClass(DateExtractor.class);
 
     FileInputFormat.setInputPaths(job, input);
 
@@ -249,7 +276,11 @@ public class DocumentExtractor extends Configured implements Tool {
 
     job.setMapperClass(MyMapper.class);
     job.setNumReduceTasks(0);
-
+    
+    DistributedCache.addCacheFile(new URI(posModelJar), job.getConfiguration());
+    DistributedCache.addCacheFile(new URI(sutModelJar), job.getConfiguration());
+    DistributedCache.createSymlink(job.getConfiguration());
+    
     long startTime = System.currentTimeMillis();
     job.waitForCompletion(true);
     LOG.info("Job Finished in " + (System.currentTimeMillis() - startTime) / 1000.0 + " seconds");
@@ -268,8 +299,8 @@ public class DocumentExtractor extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + DocumentExtractor.class.getCanonicalName() + " with args "
+    LOG.info("Running " + DateExtractor.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new DocumentExtractor(), args);
+    ToolRunner.run(new DateExtractor(), args);
   }
 }
