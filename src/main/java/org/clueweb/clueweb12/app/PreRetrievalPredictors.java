@@ -17,7 +17,6 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
-
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -59,6 +58,7 @@ import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
+
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
@@ -70,41 +70,21 @@ import com.google.common.collect.Sets;
 
 /**
  * <p>
- * Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type:
- * smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.
- * </p>
+ * Implementation of a number of pre-retrieval predictors (i.e. those not based on the result list).
  * 
- * <p>
- * Approach:
- * </p>
- * 
- * <ol>
- * <li>read the queries and convert into termids (based on the dictionary); make sure to use the
- * same Lucene Analyzer as in ComputeTermStatistics.java
- * 
- * <li>MyMapper: walk over all document vectors
- * <ul>
- * <li>determine all queries which have at least one query term is occurring in the document
- * <li>for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
- * </ul>
- * 
- * <li>MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
- * 
- * <li>MyReducer: for each query
- * <ul>
- * <li>create a priority queue (minimum heap): we only need to keep the topk highest probability
- * scores
- * <li>once all key/values are processed, "sort" the doc/score elements in the priority queue
- * (already semi-done in heap)
- * <li>output the results in TREC result file format
- * </ul>
- * </ol>
+ * SumVAR, AvVAR, MaxVAR
+ * - TF.IDF weight per query term/document w(t,d)
+ * - average w across all documents
+ * - standard deviation of those
+ * map  -> runs over all documents, we know the query terms .. output [ (qid, t#1), count]
+ *      -> we still require average                                   [ (qid, t#2), sum w(t,d)]
+ *      ->                                                            [ (qid, t#3), w(t,d)]
  * 
  * @author Claudia Hauff
  */
-public class LMRetrieval extends Configured implements Tool {
+public class PreRetrievalPredictors extends Configured implements Tool {
 
-  private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
+  private static final Logger LOG = Logger.getLogger(PreRetrievalPredictors.class);
 
   /*
    * Partitioner: all keys with the same qid go to the same reducer
@@ -118,24 +98,7 @@ public class LMRetrieval extends Configured implements Tool {
   }
 
   /*
-   * comparator for the priority queue: elements (docid,score) are sorted by score
-   */
-  private static class CustomComparator implements Comparator<PairOfStringFloat> {
-    @Override
-    public int compare(PairOfStringFloat o1, PairOfStringFloat o2) {
-
-      if (o1.getRightElement() == o2.getRightElement()) {
-        return 0;
-      }
-      if (o1.getRightElement() > o2.getRightElement()) {
-        return 1;
-      }
-      return -1;
-    }
-  }
-
-  /*
-   * Mapper outKey: (qid,docid), value: probability score
+   * Mapper outKey: (qid,term#indicator), value: TF.IDF or count
    */
   protected static class MyMapper extends
       Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
@@ -143,20 +106,19 @@ public class LMRetrieval extends Configured implements Tool {
     private static final PForDocVector DOC = new PForDocVector();
     private DefaultFrequencySortedDictionary dictionary;
     protected TermStatistics stats;
-    protected double smoothingParam;
 
     private static Analyzer ANALYZER;
 
     /*
-     * for quick access store the queries in two hashmaps: 1. key: termid, value: list of queries in
-     * which the termid occurs 2. key: qid, value: list of termids that occur in the query
+     * set of all termids occurring in the queries
      */
-    protected Map<Integer, Set<Integer>> termidQuerySet;
-    protected Map<Integer, Set<Integer>> queryTermidSet;
+    protected Set<Integer> termidSet;
 
-    // complex key: (qid,docid)
+    protected Map<Integer, Integer> counts;
+    protected Map<Integer, Float> sums;
+    
+    // complex key: (qid,term#indicator)
     private static final PairOfIntString keyOut = new PairOfIntString();
-    // value: float; probability score log(P(q|d))
     private static final FloatWritable valueOut = new FloatWritable();
 
     @Override
@@ -166,9 +128,6 @@ public class LMRetrieval extends Configured implements Tool {
       dictionary = new DefaultFrequencySortedDictionary(path, fs);
       stats = new TermStatistics(new Path(path), fs);
 
-      smoothingParam = context.getConfiguration().getFloat(SMOOTHING, 1000f);
-      LOG.info("Smoothing set to " + smoothingParam);
-
       String analyzerType = context.getConfiguration().get(PREPROCESSING);
       ANALYZER = AnalyzerFactory.getAnalyzer(analyzerType);
       if (ANALYZER == null) {
@@ -177,8 +136,7 @@ public class LMRetrieval extends Configured implements Tool {
       }
 
       // read the queries from file
-      termidQuerySet = Maps.newHashMap();
-      queryTermidSet = Maps.newHashMap();
+      termidSet = Sets.newHashSet();
       FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(QUERIES_OPTION)));
       BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
       String line;
@@ -189,9 +147,6 @@ public class LMRetrieval extends Configured implements Tool {
               + line);
           continue;
         }
-        int qid = Integer.parseInt(line.substring(0, index));
-        Set<Integer> termidSet = Sets.newHashSet();
-
         LOG.info("Parsing query line " + line);
 
         // normalize the terms (same way as the documents)
@@ -204,17 +159,7 @@ public class LMRetrieval extends Configured implements Tool {
           }
 
           termidSet.add(termid);
-
-          if (termidQuerySet.containsKey(termid)) {
-            termidQuerySet.get(termid).add(qid);
-          } else {
-            Set<Integer> qids = Sets.newHashSet();
-            qids.add(qid);
-            termidQuerySet.put(termid, (HashSet<Integer>) qids);
-          }
         }
-
-        queryTermidSet.put(qid, termidSet);
       }
       br.close();
       fsin.close();
@@ -224,11 +169,7 @@ public class LMRetrieval extends Configured implements Tool {
     public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
         InterruptedException {
       PForDocVector.fromIntArrayWritable(ints, DOC);
-
-      // determine which queries we care about for this document
-      // (i.e. at least one query term appears in the document)
-      HashSet<Integer> queriesToDo = Sets.newHashSet();
-
+      
       // tfMap of the document
       HashMap<Integer, Integer> tfMap = Maps.newHashMap();
       for (int termid : DOC.getTermIds()) {
@@ -236,45 +177,52 @@ public class LMRetrieval extends Configured implements Tool {
         if (tfMap.containsKey(termid))
           tf += tfMap.get(termid);
         tfMap.put(termid, tf);
-
-        if (termidQuerySet.containsKey(termid)) {
-          for (int qid : termidQuerySet.get(termid)) {
-            queriesToDo.add(qid);
-          }
-        }
       }
-
-      // for each of the interesting queries, compute log(P(q|d))
-      //for (int qid : queriesToDo) {
-      for(int qid : queryTermidSet.keySet()) {
-        double score = 0.0;
-
-        for (int termid : queryTermidSet.get(qid)) {
-          double tf = 0.0;
-          if (tfMap.containsKey(termid))
-            tf = tfMap.get(termid);
-          double df = stats.getDf(termid);
-
-          double mlProb = tf / (double) DOC.getLength();
-          double colProb = df / (double) stats.getCollectionSize();
-
-          double prob = 0.0;
-
-          // JM smoothing
-          if (smoothingParam <= 1.0) {
-            prob = smoothingParam * mlProb + (1.0 - smoothingParam) * colProb;
-          }
-          // Dirichlet smoothing
-          else {
-            prob = (double) (tf + smoothingParam * colProb)
-                / (double) (DOC.getLength() + smoothingParam);
-          }
-
-          score += (float) Math.log(prob);
+      
+      /*
+      * map  -> runs over all documents, we know the query terms .. output [ (qid, t#1), count]
+          *      -> we still require average                                   [ (qid, t#2), sum w(t,d)]
+          *      ->                                                            [ (qid, t#3), w(t,d)]
+      */
+      for(int termid : termidSet) {
+        if(tfMap.containsKey(termid)==false) {
+          continue;
         }
+        
+        double df = stats.getDf(termid);
+        float w = (float) (1 + Math.log(tfMap.get(termid)) * Math.log( 1 + stats.getCollectionSize() / stats.getDf(termid) ));
+        
+        if(counts.containsKey(termid)) {
+          counts.put(termid,  counts.get(termid)+1);
+        }
+        else {
+          counts.put(termid, 1);
+        }
+        
+        if(sums.containsKey(termid)) {
+          sums.put(termid, sums.get(termid)+w);
+        }
+        else {
+          sums.put(termid, w);
+        }
+        
+        keyOut.set(termid, "#3");
+        valueOut.set(w);
+        context.write(keyOut, valueOut);
+      }
+    }
+    
 
-        keyOut.set(qid, key.toString());
-        valueOut.set((float) score);
+    @Override
+    public void cleanup(Context context) throws IOException, InterruptedException {
+      
+      for(Integer termid : counts.keySet()) {
+        keyOut.set(termid, "#1");
+        valueOut.set(counts.get(termid));
+        context.write(keyOut, valueOut);
+        
+        keyOut.set(termid, "#2");
+        valueOut.set(sums.get(termid));
         context.write(keyOut, valueOut);
       }
     }
@@ -282,72 +230,86 @@ public class LMRetrieval extends Configured implements Tool {
 
   private static class MyReducer extends
       Reducer<PairOfIntString, FloatWritable, NullWritable, Text> {
-    private int topk;
-    // PairOfStringFloat is (docid,score)
-    private Map<Integer, PriorityQueue<PairOfStringFloat>> queueMap;
+ 
     private static final NullWritable nullKey = NullWritable.get();
     private static final Text valueOut = new Text();
 
-    public void setup(Context context) throws IOException {
-      topk = context.getConfiguration().getInt(TOPK, 1000);
-      LOG.info("topk parameter set to " + topk);
-
-      queueMap = Maps.newHashMap();
+    private Map<Integer, Float> sums;
+    private Map<Integer, Float> counts;
+    private Map<Integer, Float> dev;
+    
+    @Override
+    public void setup(Context context) {
+      sums = Maps.newHashMap();
+      counts = Maps.newHashMap();
+      dev = Maps.newHashMap();
     }
-
+    
     @Override
     public void reduce(PairOfIntString key, Iterable<FloatWritable> values, Context context)
         throws IOException, InterruptedException {
-      int qid = key.getLeftElement();
-
-      PriorityQueue<PairOfStringFloat> queue = null;
-
-      if (queueMap.containsKey(qid)) {
-        queue = queueMap.get(qid);
-      } else {
-        queue = new PriorityQueue<PairOfStringFloat>(topk + 1, new CustomComparator());
-        queueMap.put(qid, queue);
-      }
-
-      // actually, it should only be a single element
-      float scoreSum = 0f;
-      for (FloatWritable v : values) {
-        scoreSum += v.get();
-      }
-
-      // if there are less than topk elements, add the new (docid, score) to the queue
-      if (queue.size() < topk) {
-        queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
-      }
-      // if we have topk elements in the queue, we need to check if the queue's current minimum is
-      // smaller than the incoming score; if yes, "exchange" the (docid,score) elements
-      else if (queue.peek().getRightElement() < scoreSum) {
-        queue.remove();
-        queue.add(new PairOfStringFloat(key.getRightElement(), scoreSum));
+      
+      int tid = key.getLeftElement();
+      
+      // #1 count
+      // #2 sum
+      // #3 are the individual weights
+         
+      double stdev = 0.0;
+      
+      for(FloatWritable f : values) {
+        if(key.getRightElement().equals("#1")) {
+          float c = f.get();
+          if(counts.containsKey(tid)) {
+            c += counts.get(tid);
+          }
+          counts.put(tid, c);
+        }
+        else if(key.getRightElement().equals("#2")) {
+          float s = f.get();
+          if(sums.containsKey(tid)) {
+            s += sums.get(tid);
+          }
+          sums.put(tid, s);
+        }
+        else if(key.getRightElement().equals("#3")) { {
+          float mean = sums.get(tid) / counts.get(tid);
+          float w = (float)Math.pow(f.get()-mean, 2.0);
+          if(dev.containsKey(tid)) {
+            dev.put(tid, dev.get(tid)+w);
+          }
+        }
       }
     }
 
     // emit the scores for all queries
     public void cleanup(Context context) throws IOException, InterruptedException {
-      for (int qid : queueMap.keySet()) {
-        PriorityQueue<PairOfStringFloat> queue = queueMap.get(qid);
-
-        if (queue.size() == 0) {
-          continue;
+      
+      Map<Integer, Double> maxMap = Maps.newHashMap();
+      Map<Integer, Double> sumMap = Maps.newHashMap();
+      Map<Integer, Double> countMap = Maps.newHashMap();
+      
+      for(String k : dev.keySet()) {
+        int qid = Integer.parseInt(k.substring(0, k.indexOf('|')));
+        
+        double res = Math.sqrt(dev.get(k)/counts.get(k));
+        if(maxMap.containsKey(qid)==false || res>maxMap.get(qid)) {
+          maxMap.put(qid,  res);
         }
-
-        List<PairOfStringFloat> orderedList = Lists.newArrayList();
-        while (queue.size() > 0) {
-          orderedList.add(queue.remove());
+        if(sumMap.containsKey(qid)==false) {
+          sumMap.put(qid, res);
         }
-
-        for (int i = orderedList.size(); i > 0; i--) {
-          PairOfStringFloat p = orderedList.get(i - 1);
-          valueOut.set(qid + " Q0 " + p.getLeftElement() + " " + (orderedList.size() - i + 1) + " "
-              + p.getRightElement() + " lmretrieval");
-          context.write(nullKey, valueOut);
+        else {
+          sumMap.put( qid, sumMap.get(qid)+res );
+        }
+        if(countMap.containsKey(qid)==false) {
+          countMap.put(qid,  1);
+        }
+        else {
+          
         }
       }
+      
     }
   }
 
@@ -412,7 +374,7 @@ public class LMRetrieval extends Configured implements Tool {
     String topk = cmdline.getOptionValue(TOPK);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
 
-    LOG.info("Tool name: " + LMRetrieval.class.getSimpleName());
+    LOG.info("Tool name: " + PreRetrievalPredictors.class.getSimpleName());
     LOG.info(" - docvector: " + docvector);
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
@@ -439,8 +401,8 @@ public class LMRetrieval extends Configured implements Tool {
       fs.delete(new Path(output), true);
     }
 
-    Job job = new Job(conf, LMRetrieval.class.getSimpleName() + ":" + docvector);
-    job.setJarByClass(LMRetrieval.class);
+    Job job = new Job(conf, PreRetrievalPredictors.class.getSimpleName() + ":" + docvector);
+    job.setJarByClass(PreRetrievalPredictors.class);
 
     FileInputFormat.setInputPaths(job, docvector);
     FileOutputFormat.setOutputPath(job, new Path(output));
@@ -466,8 +428,8 @@ public class LMRetrieval extends Configured implements Tool {
    * Dispatches command-line arguments to the tool via the <code>ToolRunner</code>.
    */
   public static void main(String[] args) throws Exception {
-    LOG.info("Running " + LMRetrieval.class.getCanonicalName() + " with args "
+    LOG.info("Running " + PreRetrievalPredictors.class.getCanonicalName() + " with args "
         + Arrays.toString(args));
-    ToolRunner.run(new LMRetrieval(), args);
+    ToolRunner.run(new PreRetrievalPredictors(), args);
   }
 }

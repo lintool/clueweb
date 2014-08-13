@@ -174,67 +174,18 @@ On an empty sara cluster, this run on 50 queries takes about one hour.
 The file `runs/res.dir1000.porter.spamFiltered` is based on `runs/res.dir1000.porter` and filters out all documents with a spam score below 70.
 
 
-Sanity check
-------------
-To have confidence in the implementation, the baseline runs are compared with the [official 2013 baselines](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines/2013/ql) (Indri runs) provided by the TREC's Web track organizers.
+Effectiveness on 2012/13 TREC Web queries
+-----------------------------------------
+To compare the implementation against an established baseline, we compare against the [Indri baseline](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines), provided by the TREC Web track organizers in 2012 and 2013. For simplicity, we use MAP and NDCG@20 as metrics (although these are not the main metrics for the recent Web track tasks).
 
-Since no relevance judgments are available for ClueWeb12, we report the overlap in document ids among the top 10 / top 1000 ranked documents for each query between our baseline and the organizer ql baseline [results-catA.txt](https://github.com/trec-web/trec-web-2013/blob/master/data/runs/baselines/2013/ql/results-cata.txt). The Perl script to compute the overlap is [available as well](https://github.com/chauff/clueweb/blob/master/scripts/computeOverlap.pl). 
+ClueWeb09, queries 151 - 200, top 1000 documents
+* Indri QL: 0.0512 (MAP), 0.0631 (NDCG@20)
+* Indri RM: 0.0547 (MAP), 0.0618 (NDCG@20)
 
-The organizer's baseline was run with Krovetz stemming, so we expect the Porter-based run to have higher overlap than the `standard` run. This is indeed the case. The few 0% queries can be explained by the different tokenization, HTML parsing and the different stemming approaches (Porter is more agressive than Krovetz). 
+* this implementation QL: 0.0509 (MAP), 0.0444 (NDCG@20)
 
-| Query | Standard Top 10 | Standard Top 1000| Porter Top 10| Porter Top 1000|
-|----|----|----|----|----|
-| 201 | 90% | 84%   |90%|85%|
-| 202 | 60% | 88%   |70%|88%|
-| 203 | 60% | 66%   |70%|73%|
-| 204 | 20% | 70%   |70%|83%|
-| 205 | 30% | 46%   |60%|70%|
-| 206 | 70% | 85%   |70%|87%|
-| 207 | 0% |  15%  | 0%|15%|
-| 208 | 60% | 89%   |60%|91%|
-| 209 | 30% | 57%   |80%|81%|
-| 210 | 50% | 81%   |70%|83%|
-| 211 | 20% | 22%   |50%|52%|
-| 212 | 30% | 46%   |60%|86%|
-| 213 | 90% | 92%   |90%|95%|
-| 214 | 60% | 67%   |100%|83%|
-| 215 | 10% | 53%   |20%|60%|
-| 216 | 20% | 50%   |60%|82%|
-| 217 | 30% | 63%   |40%|58%|
-| 218 | 50% | 59%   |80%|89%|
-| 219 | 0% |  14%  |0%|15%|
-| 220 | 10% | 24%   |40%|67%|
-| 221 | 40% | 69%   |60%|71%|
-| 222 | 90% | 73%   |100%|88%|
-| 223 | 100% |81%    |100%|86%|
-| 224 | 40% | 47%   |40%|59%|
-| 225 | 80% | 88%   |80%|83%|
-| 226 | 70% | 88%   |70%|88%|
-| 227 | 0% |  3%  |0%|5%|
-| 228 | 10% | 42%   |40%|57%|
-| 229 | 60% | 80%   |90%|91%|
-| 230 | 0% |  29%  |50%|28%|
-| 231 | 0% |  28%  |30%|27%|
-| 232 | 80% | 63%   |80%|74%|
-| 233 | 70% | 86%   |70%|94%|
-| 234 | 70% | 85%   |80%|89%|
-| 235 | 60% | 76%   |60%|84%|
-| 236 | 70% | 74%   |80%|84%|
-| 237 | 90% | 52%   |80%|60%|
-| 238 | 70% | 63%   |70%|68%|
-| 239 | 70% | 92%   |90%|93%|
-| 240 | 80% | 45%   |80%|75%|
-| 241 | 0% |  2%  |0%|33%|
-| 242 | 60% | 89%   |100%|94%|
-| 243 | 40% | 82%   |60%|84%|
-| 244 | 70% | 92%   |80%|92%|
-| 245 | 50% | 78%   |30%|83%|
-| 246 | 30% | 72%   |80%|81%|
-| 247 | 80% | 56%   |90%|60%|
-| 248 | 50% | 63%   |90%|87%|
-| 249 | 0% |  2%  |0%|4%|
-| 250 | 90% | 53% |90%|57%|
+ClueWeb12, queries 201 - 250, top 10000 documents
+* Indri QL: 0.1373 (MAP), 0.2153 (NDCG@20)
+* Indri RM: 0.1208 (MAP), 0.1939 (NDCG@20)
 
-
-[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/chauff/clueweb/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
-
+* this implementation QL: 0.1404 (MAP), 0.2369 (NDCG@20)

@@ -1,6 +1,7 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
 
+
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -107,17 +108,13 @@ public class DocumentExtractor extends Configured implements Tool {
       FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(DOCIDS_FILE)));
 
       keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
-      LOG.info("keephtml is set to " + keepHTML);
-
-      if (keepHTML) {
-        htmlParser = context.getConfiguration().get(HTML_PARSER);
-      }
+      htmlParser = context.getConfiguration().get(HTML_PARSER);
 
       BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
       String line;
       while ((line = br.readLine()) != null) {
         if (line.length() > 5) {
-          docidMap.put(line, EMPTY);
+          docidMap.put(line.toLowerCase(), EMPTY);
         }
       }
       fsin.close();
@@ -131,21 +128,22 @@ public class DocumentExtractor extends Configured implements Tool {
     public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
         InterruptedException {
 
-      String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
+      try {
+      String docid = doc.getHeaderMetadataItem("WARC-TREC-ID").toLowerCase();
       if (docid != null && docidMap.containsKey(docid)) {
-        try {
 
-          if (!keepHTML) {
+          if (keepHTML==false) {
             docidMap.put(docid, HTMLParserFactory.parse(htmlParser, doc.getContent()));
           } else {
             docidMap.put(docid, doc.getContent());
           }
           context.getCounter(Records.DOCUMENTS_FOUND).increment(1);
-        } catch (Exception e) {
-          // If Jsoup throws any exceptions, catch and move on.
-          LOG.info("Error caught processing " + docid);
-          context.getCounter(Records.HTML_PARSER_EXCEPTIONS).increment(1);
-        }
+        } 
+      }
+      catch (Exception e) {
+        // If Jsoup throws any exceptions, catch and move on.
+        LOG.info("Error caught when processing a document");
+        context.getCounter(Records.HTML_PARSER_EXCEPTIONS).increment(1);
       }
     }
 
@@ -222,13 +220,14 @@ public class DocumentExtractor extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String docidsfile = cmdline.getOptionValue(DOCIDS_FILE);
     boolean keephtml = (cmdline.getOptionValue(KEEP_HTML).equals("true")) ? true : false;
-    String htmlParser = (keephtml == true) ? cmdline.getOptionValue(HTML_PARSER) : "";
+    String htmlParser = (keephtml == false) ? cmdline.getOptionValue(HTML_PARSER) : "";
 
     LOG.info("Tool name: " + DocumentExtractor.class.getSimpleName());
     LOG.info(" - input: " + input);
     LOG.info(" - output: " + output);
     LOG.info(" - docidsfile: " + docidsfile);
-    Log.info(" - keephtml: " + keephtml);
+    LOG.info(" - keephtml: " + keephtml);
+    LOG.info(" - htmlParser: " + htmlParser);
 
     Configuration conf = getConf();
     conf.set(DOCIDS_FILE, docidsfile);
