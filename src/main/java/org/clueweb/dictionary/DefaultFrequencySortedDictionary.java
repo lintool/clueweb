@@ -90,9 +90,12 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     if (id > ids.length || id == 0 || idsToTerm == null) {
       return null;
     }
-    String term = dictionary.getTerm(idsToTerm[id - 1]);
-
-    return term;
+    try {
+      String term = dictionary.getTerm(idsToTerm[id - 1]);
+      return term;
+    }
+    catch(Exception e) {;} //catches errors observed in it.unimi.dsi.util.FrontCodedStringList.byte2Char (Malformed internal UTF-8 encoding)
+    return null;
   }
 
   /**

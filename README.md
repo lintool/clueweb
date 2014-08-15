@@ -176,16 +176,20 @@ The file `runs/res.dir1000.porter.spamFiltered` is based on `runs/res.dir1000.po
 
 Effectiveness on 2012/13 TREC Web queries
 -----------------------------------------
-To compare the implementation against an established baseline, we compare against the [Indri baseline](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines), provided by the TREC Web track organizers in 2012 and 2013. For simplicity, we use MAP and NDCG@20 as metrics (although these are not the main metrics for the recent Web track tasks).
+To compare the implementation against an established baseline, we compare against the [Indri baseline](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines), provided by the TREC Web track organizers in 2012 for ClueWeb09 and in 2013 for ClueWeb12. For simplicity, we use MAP and NDCG@20 as metrics (although these are not the main metrics for the recent Web track tasks).
 
-ClueWeb09, queries 151 - 200, top 1000 documents
+Our setup: Krovetz stemming, LM with Dirichlet smoothing (mu=1000), and RM with 100 feedback documents, 25 feedback terms and queryLambda of 0.6 -- this may not be fully aligned with the organizer baseline runs.
+
+ClueWeb09 English part, queries 151 - 200, top 1000 documents
 * Indri QL: 0.0512 (MAP), 0.0631 (NDCG@20)
 * Indri RM: 0.0547 (MAP), 0.0618 (NDCG@20)
 
 * this implementation QL: 0.0509 (MAP), 0.0444 (NDCG@20)
+* this implementation RM: 0.0727 (MAP), 0.0641 (NDCG@20)
 
 ClueWeb12, queries 201 - 250, top 10000 documents
 * Indri QL: 0.1373 (MAP), 0.2153 (NDCG@20)
 * Indri RM: 0.1208 (MAP), 0.1939 (NDCG@20)
 
 * this implementation QL: 0.1404 (MAP), 0.2369 (NDCG@20)
+* this implementation RM: 

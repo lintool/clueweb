@@ -165,7 +165,7 @@ public class RMModel extends Configured implements Tool {
 
     @Override
     public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
-        InterruptedException {
+        InterruptedException, IllegalStateException {
 
       PForDocVector.fromIntArrayWritable(ints, DOC);
 
@@ -193,6 +193,9 @@ public class RMModel extends Configured implements Tool {
       for (Integer termid : tfMap.keySet()) {
 
         String term = dictionary.getTerm(termid);
+        if(term == null ) {
+          continue;
+        }
         double tf = tfMap.get(termid);
         double df = stats.getDf(termid);
 
