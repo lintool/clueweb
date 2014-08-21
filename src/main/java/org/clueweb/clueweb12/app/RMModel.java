@@ -193,7 +193,7 @@ public class RMModel extends Configured implements Tool {
       for (Integer termid : tfMap.keySet()) {
 
         String term = dictionary.getTerm(termid);
-        if(term == null ) {
+        if(term == null ) {//check required, null indicates an error in the call
           continue;
         }
         double tf = tfMap.get(termid);
