@@ -58,6 +58,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 import java.util.Map.Entry;
 import java.util.Set;
 
@@ -210,7 +211,7 @@ public class ClueWeb09WarcRecord extends Indexable {
 				headerBuffer.append(NEWLINE);
 				String[] thisHeaderPieceParts = line.split(":", 2);
 				if (thisHeaderPieceParts.length == 2) {
-					if (thisHeaderPieceParts[0].toLowerCase().startsWith("content-length")) {
+					if (thisHeaderPieceParts[0].toLowerCase(Locale.US).startsWith("content-length")) {
 						foundContentLength = true;
 						try {
 							contentLength = Integer.parseInt(thisHeaderPieceParts[1].trim());
@@ -494,7 +495,7 @@ public class ClueWeb09WarcRecord extends Indexable {
 	 * Sets the WARC uuid string
 	 * 
 	 * @param UUID
-	 */
+	 */l
 	public void setWarcUUID(String UUID) {
 		warcHeader.UUID = UUID;
 	}
