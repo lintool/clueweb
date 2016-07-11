@@ -1,7 +1,5 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
-
-
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -17,8 +15,10 @@
  * 
  * @author Claudia Hauff
  * 
- * Takes as input a file with docids (one per line) and writes their content to file.
- * 
+ * Either:
+ *  - Takes as input a file with docids (one per line) and writes their content to file.
+ *  - If docidsfile is "-1", all encountered content is written to files (in batches of 10,000 docs to file)
+ *  
  * MyMapper:
  * 	2.1 the docids are read from the file in setup()
  * 	2.2 all *warc.gz files are read in map() and if the right docid is hit, the content is stored
@@ -95,8 +95,10 @@ public class DocumentExtractor extends Configured implements Tool {
 
   private static boolean keepHTML;
   private static String htmlParser;
+  private static boolean writeAll;
   private static final HashMap<String, String> docidMap = Maps.newHashMap();
   private static final String EMPTY = "";
+  private static int fileNumber = 1;
 
   private static class MyMapper extends
       Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
@@ -105,23 +107,29 @@ public class DocumentExtractor extends Configured implements Tool {
     public void setup(Context context) throws IOException {
 
       FileSystem fs = FileSystem.get(context.getConfiguration());
-      FSDataInputStream fsin = fs.open(new Path(context.getConfiguration().get(DOCIDS_FILE)));
-
+      String docidsFile = context.getConfiguration().get(DOCIDS_FILE);
+      
+      writeAll = (docidsFile.equals("-1")) ? true : false;
       keepHTML = context.getConfiguration().getBoolean(KEEP_HTML, true);
       htmlParser = context.getConfiguration().get(HTML_PARSER);
 
-      BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
-      String line;
-      while ((line = br.readLine()) != null) {
-        if (line.length() > 5) {
-          docidMap.put(line.toLowerCase(), EMPTY);
+      if(writeAll==false) {
+        FSDataInputStream fsin = fs.open(new Path(docidsFile));
+        BufferedReader br = new BufferedReader(new InputStreamReader(fsin));
+        String line;
+        while ((line = br.readLine()) != null) {
+          if (line.length() > 5) {
+            docidMap.put(line.toLowerCase(), EMPTY);
+          }
         }
+        fsin.close();
+        br.close();
+        LOG.info("Number of docids read from " + docidsFile + ": "
+            + docidMap.size());
       }
-      fsin.close();
-      br.close();
-
-      LOG.info("Number of docids read from " + context.getConfiguration().get(DOCIDS_FILE) + ": "
-          + docidMap.size());
+      else {
+        LOG.info("Writing all documents encountered to file");
+      }
     }
 
     @Override
@@ -129,8 +137,14 @@ public class DocumentExtractor extends Configured implements Tool {
         InterruptedException {
 
       try {
-      String docid = doc.getHeaderMetadataItem("WARC-TREC-ID").toLowerCase();
-      if (docid != null && docidMap.containsKey(docid)) {
+        //from time to time write the hashmap content to file
+        if(docidMap.size()>10000) {
+          batchWrite(context);
+          docidMap.clear();
+        }
+    
+        String docid = doc.getHeaderMetadataItem("WARC-TREC-ID").toLowerCase();
+        if (docid != null && (docidMap.containsKey(docid) || writeAll==true) ) {
 
           if (keepHTML==false) {
             docidMap.put(docid, HTMLParserFactory.parse(htmlParser, doc.getContent()));
@@ -146,29 +160,40 @@ public class DocumentExtractor extends Configured implements Tool {
         context.getCounter(Records.HTML_PARSER_EXCEPTIONS).increment(1);
       }
     }
-
-    @Override
-    public void cleanup(Context context) throws IOException {
-
+    
+    public void batchWrite(Context context) throws IOException {
       FileSystem fs = FileSystem.get(context.getConfiguration());
       String outputFolder = context.getConfiguration().get(OUTPUT_OPTION);
       if (!outputFolder.endsWith(File.separator))
         outputFolder += File.separator;
+      Path p = new Path(outputFolder + (fileNumber++));
+      FSDataOutputStream fsout = fs.create(p);
+      BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
 
       for (String docid : docidMap.keySet()) {
-        if (docidMap.get(docid).equals(EMPTY)) {
+        if (docidMap.get(docid).equals(EMPTY))
           continue;
-        }
 
-        Path p = new Path(outputFolder + docid);
-        FSDataOutputStream fsout = fs.create(p);
-        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
+        bw.write("<DOC>");
+        bw.newLine();
+        bw.write("<DOCNO>"+docid+"</DOCNO>");
+        bw.newLine();
+        bw.write("<TEXT>");
+        bw.newLine();
         bw.write(docidMap.get(docid));
-        bw.close();
-        fsout.close();
-
-        LOG.info("Written document content to " + p.toString());
+        bw.write("</TEXT>");
+        bw.newLine();
+        bw.write("</DOC>");
+        bw.newLine();
       }
+      bw.close();
+      fsout.close();
+      fs.close();
+    }    
+
+    @Override
+    public void cleanup(Context context) throws IOException {
+      batchWrite(context);
     }
   }
 
@@ -209,7 +234,7 @@ public class DocumentExtractor extends Configured implements Tool {
     }
 
     if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
-        || !cmdline.hasOption(DOCIDS_FILE) || !cmdline.hasOption(KEEP_HTML)) {
+         || !cmdline.hasOption(KEEP_HTML)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);

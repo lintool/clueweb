@@ -103,7 +103,7 @@ Spam scores can be between 0 and 99 with the spammiest documents having a score 
 To run the code, call:
 
 ```
-$ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar
 	org.clueweb.clueweb12.app.SpamScoreFiltering \
 	-output /user/chauff/res.dir1000.porter.spamFiltered \
 	-spamScoreFolder /data/private/clueweb12/derived/waterloo-spam-cw12-decoded \ 		
@@ -128,7 +128,7 @@ A simple cosine based similarity approach is implemented in `DuplicateFiltering`
 To run the code, call:
 
 ```
-$ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar \
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	org.clueweb.clueweb12.app.DuplicateFiltering 
 	-cosineSimThreshold 0.8 \ 
 	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
@@ -151,7 +151,7 @@ A helper app: given a file with a list of docids, it extracts the documents' con
 To run the code, call:
 
 ```
-$ hadoop jar clueweb-tools-0.3-SNAPSHOT-fatjar.jar \
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
 	org.clueweb.clueweb12.app.DocumentExtractor \
 	-docidsfile /user/chauff/docids \
 	-input /data/private/clueweb12/Disk*/*/*/*.warc.gz \
@@ -163,6 +163,7 @@ The parameters are:
 + `docidsfile`: a file with one docid per line; all docids are extracted from the WARC input files
 + `input`: list of WARC files
 + `keephtml`: parameter that is either `true` (keep the HTML source of each document) or `false` (parse the documents, remove HTML)
++ if `keephtml` is `false`, `htmlParser` needs to be provided (`tika` or `jsoup`)
 + `output`: folder where the documents' content is stored - one file per docid
 
 

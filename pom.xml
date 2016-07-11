@@ -4,9 +4,9 @@
 	<groupId>org.clueweb</groupId>
 	<artifactId>clueweb-tools</artifactId>
 	<packaging>jar</packaging>
-	<version>0.4-SNAPSHOT</version>
+	<version>0.5-SNAPSHOT</version>
 	<name>clueweb-tools</name>
-	<description>Hadoop tools for working with the ClueWeb 2012 collection</description>
+	<description>Hadoop tools for working with the ClueWeb 2009/2012 collections</description>
 	<url>http://clueweb.org/</url>
 
 	<licenses>
@@ -18,9 +18,9 @@
 	</licenses>
 
 	<scm>
-		<connection>scm:git:git@github.com:lintool/clueweb.git</connection>
-		<developerConnection>scm:git:git@github.com:lintool/clueweb.git</developerConnection>
-		<url>git@github.com:lintool/clueweb.git</url>
+		<connection>scm:git:git@github.com:chauff/clueweb.git</connection>
+		<developerConnection>scm:git:git@github.com:chauff/clueweb.git</developerConnection>
+		<url>git@github.com:chauff/clueweb.git</url>
 	</scm>
 
 	<developers>
@@ -28,6 +28,11 @@
 			<id>lintool</id>
 			<name>Jimmy Lin</name>
 			<email>jimmylin@umd.edu</email>
+		</developer>
+		<developer>
+			<id>chauff</id>
+			<name>Claudia Hauff</name>
+			<email>c.hauff@tudelft.nl</email>
 		</developer>
 	</developers>
 
@@ -96,6 +101,8 @@
 												<exclude>META-INF/*.SF</exclude>
 												<exclude>META-INF/*.DSA</exclude>
 												<exclude>META-INF/*.RSA</exclude>
+												<exclude>META-INF/LICENSE*</exclude>
+                                    			<exclude>license/*</exclude>
 											</excludes>
 										</filter>
 									</filters>
@@ -164,15 +171,17 @@
 			<artifactId>log4j</artifactId>
 			<version>1.2.17</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-common -->
 		<dependency>
-			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-core</artifactId>
-			<version>1.1.2</version>
-		</dependency>
+		    <groupId>org.apache.hadoop</groupId>
+		    <artifactId>hadoop-common</artifactId>
+		    <version>2.2.0</version>
+		</dependency>		
+		<!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->
 		<dependency>
-			<groupId>org.apache.hadoop</groupId>
-			<artifactId>hadoop-client</artifactId>
-			<version>1.1.2</version>
+		    <groupId>org.apache.hadoop</groupId>
+		    <artifactId>hadoop-client</artifactId>
+		    <version>2.2.0</version>
 		</dependency>
 		<dependency>
 			<groupId>org.jsoup</groupId>
