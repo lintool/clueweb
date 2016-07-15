@@ -37,10 +37,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -56,35 +52,17 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.Mapper.Context;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
-import org.apache.lucene.analysis.Analyzer;
-import org.apache.lucene.util.Version;
 import org.clueweb.clueweb12.ClueWeb12WarcRecord;
 import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
-import org.clueweb.data.TermStatistics;
-import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
-import org.clueweb.dictionary.PorterAnalyzer;
-import org.clueweb.util.AnalyzerFactory;
 import org.clueweb.util.HTMLParserFactory;
-import org.jsoup.Jsoup;
-import org.mortbay.log.Log;
-
-import tl.lin.data.pair.PairOfIntLong;
-import tl.lin.lucene.AnalyzerUtils;
-
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 
 public class DocumentExtractor extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DocumentExtractor.class);
@@ -96,15 +74,17 @@ public class DocumentExtractor extends Configured implements Tool {
   private static boolean keepHTML;
   private static String htmlParser;
   private static boolean writeAll;
-  private static final HashMap<String, String> docidMap = Maps.newHashMap();
   private static final String EMPTY = "";
   private static int fileNumber = 1;
 
   private static class MyMapper extends
       Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
 
+    private HashMap<String, String> docidMap;
     @Override
     public void setup(Context context) throws IOException {
+      
+      docidMap = Maps.newHashMap();
 
       FileSystem fs = FileSystem.get(context.getConfiguration());
       String docidsFile = context.getConfiguration().get(DOCIDS_FILE);
