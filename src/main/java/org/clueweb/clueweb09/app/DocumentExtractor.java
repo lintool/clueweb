@@ -30,6 +30,7 @@
 package org.clueweb.clueweb09.app;
 
 import info.debatty.java.stringsimilarity.KShingling;
+
 import info.debatty.java.stringsimilarity.StringProfile;
 
 import java.io.BufferedReader;
@@ -41,7 +42,6 @@ import java.io.OutputStreamWriter;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Vector;
-
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
@@ -167,6 +167,7 @@ public class DocumentExtractor extends Configured implements Tool {
       long timestamp2 = System.currentTimeMillis();
       Path p = new Path(outputFolder + timestamp1 + "_" + timestamp2);
       FSDataOutputStream fsout = fs.create(p);
+
       BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
       
       //hardcoded output format (here to make it suitable for Solr)
