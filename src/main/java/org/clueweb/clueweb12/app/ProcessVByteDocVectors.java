@@ -53,6 +53,7 @@ public class ProcessVByteDocVectors extends Configured implements Tool {
   private static final Joiner JOINER = Joiner.on("|");
 
   private static class MyMapper extends Mapper<Text, BytesWritable, Text, Text> {
+
     private static final VByteDocVector DOC = new VByteDocVector();
 
     private DefaultFrequencySortedDictionary dictionary;
@@ -65,8 +66,8 @@ public class ProcessVByteDocVectors extends Configured implements Tool {
     }
 
     @Override
-    public void map(Text key, BytesWritable bytes, Context context)
-        throws IOException, InterruptedException {
+    public void map(Text key, BytesWritable bytes, Context context) throws IOException,
+        InterruptedException {
       VByteDocVector.fromBytesWritable(bytes, DOC);
 
       List<String> terms = Lists.newArrayList();
@@ -89,12 +90,12 @@ public class ProcessVByteDocVectors extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -108,8 +109,8 @@ public class ProcessVByteDocVectors extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
-        !cmdline.hasOption(DICTIONARY_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DICTIONARY_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);

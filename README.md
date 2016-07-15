@@ -1,144 +1,202 @@
-ClueWeb Tools
-=============
+ClueWeb Tools (Fork) - Retrieval models
+=======================================
 
-Hadoop tools for manipulating ClueWeb collections, the most recent of which is [ClueWeb12 collection](http://lemurproject.org/clueweb12/).
+The code is forked from [Jimmy Lin's clueweb repository](https://github.com/lintool/clueweb). This repository focuses on additional apps (for retrieval, spam filtering, duplicate filtering, etc.)
 
-Sign up to the mailing list at [the clueweb-list@cwi.nl mailman page](https://lists.cwi.nl/mailman/listinfo/clueweb-list).
 
-Getting Stated
---------------
+Important Notes
+---------------
++ The apps `BuildPForDocVectors`, `BuildVByteDocVectors` and `ComputeTermStatistics` require an additional parameter: `htmlParser` which can either be `tika` or `jsoup` (changes the HTML parser used).
++ The parameters `htmlParser` and `preprocessing` need to be the same during the creation of the dictionary and document vectors and the retrieval apps (otherwise the results will be poor).
 
-You can clone the repo with the following command:
+
+Retrieval
+---------
+
+Implemented are currently the basic language modeling approach to IR and its pseudo-relevance feedback component (relevance language models RM1/RM3).
+The implemented smoothing types are linear interpolation and Dirichlet.
+
+To run the code first follow the installation guideline of the original [clueweb repository]((https://github.com/lintool/clueweb) and build the dictionary and document vectors as described.
+
+To conduct a query likelihood retrieval run, call:
 
 ```
-$ git clone git://github.com/lintool/clueweb.git
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.LMRetrieval \
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-smoothing 1000 \
+	-output /user/chauff/res.dir1000 \
+	-queries /user/chauff/web.queries.trec2013 \
+	-topk 1000 \
+	-preprocessing porter
 ``` 
 
-Once you've cloned the repository, build the package with Maven:
+The parameters are:
++ `dictionary`: HDFS path to the dictionary created by the clueweb tools
++ `smoothing`: the smoothing parameter in the LM-based retrieval model; a value of <=1 automatically backs off to smoothing with linear interpolation while a value >1 runs Dirichlet smoothing (default is 1000)
++ `output`: folder in which the TREC results are collected (in TREC result file format); to merge everything into one file in the end call `hadoop fs -getmerge /user/chauff/res.dir1000 res.dir1000`; the merged result file should run smoothly through `trec_eval`
++ `queries`: HDFS path to query file (assumed format is the same as this year's distributed query file, i.e. per line [queryID]:[term1] [term2] ...)
++ `docvector`: HDFS path to the document vectors (PFor format) created by the clueweb tools; beware of the necessity for using `*` to identify the files (instead of just the folder)
++ `topk`: number of results that should be returned per query (default is 1000)
++ `preprocessing`: indicates the stemming procedure; either `porter`, `krovetz` or `standard` (no stemming)
 
+
+To create a RM1/RM3 retrieval run, two steps are necessary: 
++ first, an updated query model is created (derived from the top ranked documents of the query likelihood run)
++ the updated query model is used for retrieval
+
+The call to create the query model based on the initially top ranked documents is as follows:
 ```
-$ mvn clean package appassembler:assemble
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.RMModel \
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-smoothing 1000 \
+	-output /user/chauff/rmmodel \
+	-trecinputfile /user/chauff/res.dir1000 \
+	-numFeedbackDocs 10 \
+	-numFeedbackTerms 10 \
+``` 
+
+The additional parameters are:
++ `trecinputfile`: the result file generated in the query likelihood run
++ `numFeedbackDocs`: the number of top ranked documents per query that are used to compute the updated query model
++ `numFeedbackTerms`: the number of terms retained in the query model
+
+The `output` file of the app contains the query model and has the format `[queryID] [term] [weight]`:
 ```
-
-Two notes:
-
-+ `appassembler:assemble` automatically generates a few launch scripts for you.
-+ in addition to the normal jar (`clueweb-tools-0.X-SNAPSHOT.jar`), this package uses the [Maven Shade plugin](http://maven.apache.org/plugins/maven-shade-plugin/) to create a "fat jar" (`clueweb-tools-0.X-SNAPSHOT-fatjar.jar`) that includes all dependencies except for Hadoop, so that the jar can be directly submitted via `hadoop jar ...`.
-
-To automatically generate project files for Eclipse:
-
-```
-$ mvn eclipse:clean
-$ mvn eclipse:eclipse
-```
-
-You can then use Eclipse's Import "Existing Projects into Workspace" functionality to import the project.
-
-Counting Records
-----------------
-
-For sanity checking and as a "template" for other Hadoop jobs, the package provides a simple program to count WARC records in ClueWeb12:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.CountClueWarcRecords -input /path/to/warc/files/
-```
-
-Examples of `/path/to/warc/files/` are:
-
-+ `/data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz`: for a single ClueWeb12 segment
-+ `/data/private/clueweb12/Disk1/ClueWeb12_*/*/*.warc.gz`: for an entire ClueWeb12 disk
-+ `/data/private/clueweb12/Disk[1234]/ClueWeb12_*/*/*.warc.gz`: for all of ClueWeb12
-
-Building a Dictionary
----------------------
-
-The next step is to build a dictionary that provides three capabilities:
-
-+ a bidirectional mapping from terms (strings) to termids (integers)
-+ lookup of document frequency (*df*) by term or termid
-+ lookup of collection frequency (*cf*) by term or termid
-
-To build the dictionary, we must first compute the term statistics:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.ComputeTermStatistics \
- -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
- -output term-stats/segment00
+201	boards	0.011376762
+201	video	0.0120078195
 ```
 
-By default, the program throws away all terms with *df* less than 100, but this parameter can be set on the command line. The above command compute term statistics for a segment of ClueWeb12. It's easier to compute term statistics segment by segment to generate smaller and more manageable Hadoop jobs.
+In the second step, the query model is interpolated with the original query:
+```
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.RMRetrieval \
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-smoothing 1000 \
+	-topk 1000 \
+	-preprocessing porter \
+	-rmmodel /user/chauff/rmmodel \
+	-queries /user/chauff/web.queries.trec2013 \
+	-queryLambda 0.6 \
+	-output /user/chauff/res.rm.dir1000
+``` 
 
-Compute term statistics for all the other segments in the same manner.
+The additional parameters are:
++ `rmmodel`: the file generated in the first step
++ `queryLambda`: how to interpolate the query model with the original query (if set to 0, the language model type is RM1, otherwise RM3)
++ `output`: the result file in TREC format
 
-Next, merge all the segment statistics together:
+
+
+Spam Filter
+-----------
+
+The [spam scores provided by UWaterloo](http://www.mansci.uwaterloo.ca/~msmucker/cw12spam/) are also available on sara.
+
+The spam filtering app takes as input a TREC result file (generated by the retrieval app for instance) and filters out all documents with a spam score below a certain threshold. 
+Spam scores can be between 0 and 99 with the spammiest documents having a score of 0 and the most non-spam documents having a score of 99. Using 70 as threshold usually works well.
+
+To run the code, call:
 
 ```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.MergeTermStatistics \
- -input term-stats/segment* -output term-stats-all
-```
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar
+	org.clueweb.clueweb12.app.SpamScoreFiltering \
+	-output /user/chauff/res.dir1000.porter.spamFiltered \
+	-spamScoreFolder /data/private/clueweb12/derived/waterloo-spam-cw12-decoded \ 		
+	-spamThreshold 70 \
+	-trecinputfile /user/chauff/res.dir1000.porter \
+``` 
 
-Finally, build the dictionary:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.BuildDictionary \
- -input term-stats-all -output dictionary -count 7160086
-```
-
-You need to provide the number of terms in the dictionary via the `-count` option. That value is simply the number of output reducers from `MergeTermStatistics`.
-
-To explore the contents of the dictionary, use this little interactive program:
-
-```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.dictionary.DefaultFrequencySortedDictionary dictionary
-```
-
-On ClueWeb12, following the above instructions will create a dictionary with 7,160,086 terms.
+The parameters are:
++ `output`: folder in which the TREC results are collected (in TREC result file format)
++ `spamScoreFolder`: HDFS path to the folder where the UWaterloo spam scores reside
++ `spamThreshold`: documents with a spam score BELOW this number are considered as spam
++ `trecinputfile`: HDFS path to the TREC result file which is used as starting point for filtering
 
 
-**Implementation details:** Tokenization is performed by first using Jsoup throw away all markup information and then passing the resulting text through Lucene's `StandardAnalyzer`.
 
-The dictionary has two components: the terms are stored as a front-coded list (which necessarily means that the terms must be sorted); a monotone minimal perfect hash function is used to hash terms (strings) into the lexicographic position. Term to termid lookup is accomplished by the hashing function (to avoid binary searching through the front-coded data structure, which is expensive). Termid to term lookup is accomplished by direct accesses into the front-coded list. An additional mapping table is used to convert the lexicographic position into the (*df*-sorted) termid. 
+De-duplication
+--------------
+To increase diversity, duplicate documents can be removed from the result ranking (in effect pushing lower ranked results up the ranking).
 
-Building Document Vectors
--------------------------
+A simple cosine based similarity approach is implemented in `DuplicateFiltering`: every document at rank x is compared to all non-duplicate documents at higher ranks. If its cosine similarity is high enough, it is filtered out.
 
-With the dictionary, we can now convert the entire collection into a sequence of document vectors, where each document vector is represented by a sequence of termids; the termids map to the sequence of terms that comprise the document. These document vectors are much more compact and much faster to scan for processing purposes.
-
-The document vector is represented by the interface `org.clueweb.data.DocVector`. Currently, there are two concrete implementations:
-
-+ `VByteDocVector`, which uses Hadoop's built-in utilities for writing variable-length integers (what Hadoop calls VInt).
-+ `PForDocVector`, which uses PFor compression from Daniel Lemire's [JavaFastPFOR](https://github.com/lemire/JavaFastPFOR/) package.
-
-To build document vectors, use either `BuildVByteDocVectors` or `BuildPForDocVectors`:
+To run the code, call:
 
 ```
-hadoop jar target/clueweb-tools-0.X-SNAPSHOT-fatjar.jar \
- org.clueweb.clueweb12.app.Build{VByte,PFor}DocVectors \
- -input /data/private/clueweb12/Disk1/ClueWeb12_00/*/*.warc.gz \
- -output /data/private/clueweb12/derived/docvectors/segment00 \
- -dictionary /data/private/clueweb12/derived/dictionary \
- -reducers 100
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.DuplicateFiltering 
+	-cosineSimThreshold 0.8 \ 
+	-dictionary /data/private/clueweb12/derived/dictionary.XXX \
+	-docvector /data/private/clueweb12/derived/docvectors.XXX/*/part* \
+	-output /user/chauff/res.dir1000.porter.deduplicated \
+	-topk 1000 \
+	-trecinputfile /user/chauff/res.dir1000.porter
 ```
 
-Once again, it's advisable to run on a segment at a time in order to keep the Hadoop job sizes manageable. Note that the program run identity reducers to repartition the document vectors into 100 parts (to avoid the small files problem).
+The parameters (apart from the usual ones) are:
++ `cosineSimThreshold`: documents having a cosine similarity above this threshold are removed from the result file
++ `trecinputfile`: file in TREC result format which is used as a starting point for de-duplication
 
-The output directory will contain `SequenceFile`s, with a `Text` containing the WARC-TREC-ID as the key. For VByte, the value will be a `BytesWritable` object; for PFor, the value will be an `IntArrayWritable` object.
 
-To process these document vectors, either use `ProcessVByteDocVectors` or `ProcessPForDocVectors` in the `org.clueweb.clueweb12.app` package, which provides sample code for consuming these document vectors and converting the termids back into terms.
+Document extraction
+-------------------
 
-Size comparisons, on the entire ClueWeb12 collection:
+A helper app: given a file with a list of docids, it extracts the documents' content from the WARC files.
 
-+ 5.54 TB: original compressed WARC files
-+ 1.08 TB: repackaged as `VByteDocVector`s
-+ 0.86 TB: repackaged as `PForDocVector`s
-+ ~1.6 TB: uncompressed termids (collection size is ~400 billion terms)
+To run the code, call:
 
-License
--------
+```
+$ hadoop jar clueweb-tools-X.X-SNAPSHOT-fatjar.jar \
+	org.clueweb.clueweb12.app.DocumentExtractor \
+	-docidsfile /user/chauff/docids \
+	-input /data/private/clueweb12/Disk*/*/*/*.warc.gz \
+	-keephtml false \
+	-output /user/chauff/docids-output
+```
 
-Licensed under the Apache License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+The parameters are:
++ `docidsfile`: a file with one docid per line; all docids are extracted from the WARC input files
++ `input`: list of WARC files
++ `keephtml`: parameter that is either `true` (keep the HTML source of each document) or `false` (parse the documents, remove HTML)
++ if `keephtml` is `false`, `htmlParser` needs to be provided (`tika` or `jsoup`)
++ `output`: folder where the documents' content is stored - one file per docid
+
+Note, that currently the `clueweb09.app.DocumentExtractor` version is different from the `clueweb12.app.DocumentExtractor` version:
++ all documents in the input path can be extracted (set `docidsfile` to `-1`)
++ duplicate removal can be enabled by setting `removeDuplicates` to `true`
++ the title/body content are output separately in a format suitable for Solr 
+
+
+Retrieval runs
+--------------
+The files `runs/res.dir1000.{standard,porter}` contain the baseline results when running the above retrieval program (i.e. LM with Dirichlet smoothing and mu=1000) with `standard` and `porter` preprocessing respectively.
+On an empty sara cluster, this run on 50 queries takes about one hour.
+
+The file `runs/res.dir1000.porter.spamFiltered` is based on `runs/res.dir1000.porter` and filters out all documents with a spam score below 70.
+
+
+Effectiveness on 2012/13 TREC Web queries
+-----------------------------------------
+To compare the implementation against an established baseline, we compare against the [Indri baseline](https://github.com/trec-web/trec-web-2013/tree/master/data/runs/baselines), provided by the TREC Web track organizers in 2012 for ClueWeb09 and in 2013 for ClueWeb12. 
+For simplicity, we use MAP and NDCG@20 as metrics (although these are not the main metrics for the recent Web track tasks).
+
+Our setup: Krovetz stemming, LM with Dirichlet smoothing (mu=1000), and RM with 100 feedback documents, 25 feedback terms and queryLambda of 0.6 -- this may not be fully aligned with the organizer baseline runs.
+
+ClueWeb09 English part, queries 151 - 200, top 1000 documents
+* Indri QL: 0.0512 (MAP), 0.0631 (NDCG@20)
+* Indri RM: 0.0547 (MAP), 0.0618 (NDCG@20)
+
+* this implementation QL: 0.0509 (MAP), 0.0444 (NDCG@20)
+* this implementation RM: 0.0727 (MAP), 0.0641 (NDCG@20)
+
+ClueWeb12, queries 201 - 250, top 10000 documents
+* Indri QL: 0.1373 (MAP), 0.2153 (NDCG@20)
+* Indri RM: 0.1208 (MAP), 0.1939 (NDCG@20)
+
+* this implementation QL: 0.1404 (MAP), 0.2369 (NDCG@20)
+* this implementation RM: 0.1173 (MAP), 0.1971 (NDCG@20)

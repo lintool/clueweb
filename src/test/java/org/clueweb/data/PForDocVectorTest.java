@@ -1,3 +1,19 @@
+/*
+ * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You may
+ * obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 package org.clueweb.data;
 
 import static org.junit.Assert.assertEquals;
@@ -21,7 +37,7 @@ public class PForDocVectorTest {
     int len = 256;
     FastPFOR p4 = new FastPFOR();
     int[] doc = new int[len];
-    for (int i = 0; i<len; i++) {
+    for (int i = 0; i < len; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -42,7 +58,7 @@ public class PForDocVectorTest {
     int r = RANDOM.nextInt();
     // Interesting behavior of the PFor decompressor: r doesn't matter.
     p4.uncompress(trimmedOut, cinPos, r, reconstructed, coutPos);
-    
+
     assertEquals(doc.length, reconstructed.length);
     for (int i = 0; i < doc.length; i++) {
       assertEquals(doc[i], reconstructed[i]);
@@ -54,7 +70,7 @@ public class PForDocVectorTest {
     int len = 23;
     FastPFOR p4 = new FastPFOR();
     int[] doc = new int[len];
-    for (int i = 0; i<len; i++) {
+    for (int i = 0; i < len; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -62,7 +78,8 @@ public class PForDocVectorTest {
     IntWrapper outPos = new IntWrapper(0);
 
     int[] out = new int[len];
-    // We're purposely only compressing 23 values here, which is smaller than a PFor block size,
+    // We're purposely only compressing 23 values here, which is smaller
+    // than a PFor block size,
     // just to see what would happen...
     p4.compress(doc, inPos, len, out, outPos);
 
@@ -77,7 +94,7 @@ public class PForDocVectorTest {
     int len = 129;
     FastPFOR p4 = new FastPFOR();
     int[] doc = new int[len];
-    for (int i = 0; i<len; i++) {
+    for (int i = 0; i < len; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -85,11 +102,13 @@ public class PForDocVectorTest {
     IntWrapper outPos = new IntWrapper(0);
 
     int[] out = new int[len];
-    // We're purposely only compressing 129 values here, which is one more than a PFor block.
+    // We're purposely only compressing 129 values here, which is one more
+    // than a PFor block.
     p4.compress(doc, inPos, len, out, outPos);
 
     assertEquals(128, inPos.get());
-    // Indeed, the PFor compressor processes one block and that's it. (Even though we told it to
+    // Indeed, the PFor compressor processes one block and that's it. (Even
+    // though we told it to
     // compress all 129 values).
   }
 
@@ -98,7 +117,7 @@ public class PForDocVectorTest {
     int len = 128 * 4 + 1;
     FastPFOR p4 = new FastPFOR();
     int[] doc = new int[len];
-    for (int i = 0; i<len; i++) {
+    for (int i = 0; i < len; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -106,7 +125,8 @@ public class PForDocVectorTest {
     IntWrapper outPos = new IntWrapper(0);
 
     int[] out = new int[len];
-    // There are multiple blocks here, but we're tell it to compress only one block.
+    // There are multiple blocks here, but we're tell it to compress only
+    // one block.
     p4.compress(doc, inPos, 128, out, outPos);
 
     assertEquals(128, inPos.get());
@@ -137,7 +157,7 @@ public class PForDocVectorTest {
 
   public void testSerializeWithLength(int doclength) throws Exception {
     int[] doc = new int[doclength];
-    for (int i = 0; i<doclength; i++) {
+    for (int i = 0; i < doclength; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -172,7 +192,7 @@ public class PForDocVectorTest {
 
   public void testSerializeWithArrayTooLong(int doclength) throws Exception {
     int[] doc = new int[doclength + RANDOM.nextInt(20)];
-    for (int i = 0; i<doclength; i++) {
+    for (int i = 0; i < doclength; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -187,7 +207,7 @@ public class PForDocVectorTest {
       assertEquals(doc[i], v.getTermIds()[i]);
     }
   }
-  
+
   // Make sure serializing an empty document works.
   @Test
   public void testSerializeEmpty1() throws Exception {

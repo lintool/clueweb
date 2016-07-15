@@ -1,5 +1,6 @@
 /*
  * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
+
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you
  * may not use this file except in compliance with the License. You may
@@ -60,7 +61,7 @@ public class BuildWarcTrecIdMapping {
     FIELD_OPTIONS.setIndexed(true);
     FIELD_OPTIONS.setIndexOptions(IndexOptions.DOCS_ONLY);
     FIELD_OPTIONS.setStored(true);
-    FIELD_OPTIONS.setTokenized(false);        
+    FIELD_OPTIONS.setTokenized(false);
   }
 
   private static final int DEFAULT_NUM_THREADS = 4;
@@ -76,8 +77,8 @@ public class BuildWarcTrecIdMapping {
     Options options = new Options();
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("bz2 Wikipedia XML dump file").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("dir").hasArg()
-        .withDescription("index location").create(INDEX_OPTION));
+    options.addOption(OptionBuilder.withArgName("dir").hasArg().withDescription("index location")
+        .create(INDEX_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
         .withDescription("maximum number of documents to index").create(MAX_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
@@ -101,10 +102,10 @@ public class BuildWarcTrecIdMapping {
     }
 
     String indexPath = cmdline.getOptionValue(INDEX_OPTION);
-    int maxdocs = cmdline.hasOption(MAX_OPTION) ?
-        Integer.parseInt(cmdline.getOptionValue(MAX_OPTION)) : Integer.MAX_VALUE;
-    int threads = cmdline.hasOption(THREADS_OPTION) ?
-        Integer.parseInt(cmdline.getOptionValue(THREADS_OPTION)) : DEFAULT_NUM_THREADS;
+    int maxdocs = cmdline.hasOption(MAX_OPTION) ? Integer.parseInt(cmdline
+        .getOptionValue(MAX_OPTION)) : Integer.MAX_VALUE;
+    int threads = cmdline.hasOption(THREADS_OPTION) ? Integer.parseInt(cmdline
+        .getOptionValue(THREADS_OPTION)) : DEFAULT_NUM_THREADS;
 
     long startTime = System.currentTimeMillis();
 
@@ -121,7 +122,7 @@ public class BuildWarcTrecIdMapping {
 
     FileInputStream fis = null;
     BufferedReader br = null;
-    
+
     try {
       fis = new FileInputStream(new File(path));
       byte[] ignoreBytes = new byte[2];
@@ -146,7 +147,8 @@ public class BuildWarcTrecIdMapping {
 
       executor.shutdown();
       // Wait until all threads are finish
-      while (!executor.isTerminated()) {}
+      while (!executor.isTerminated()) {
+      }
 
       LOG.info("Total of " + cnt + " articles indexed.");
 
@@ -167,7 +169,7 @@ public class BuildWarcTrecIdMapping {
       fis.close();
     }
   }
-  
+
   private static class AddDocumentRunnable implements Runnable {
     private final IndexWriter writer;
     private final String s;
@@ -188,5 +190,5 @@ public class BuildWarcTrecIdMapping {
         e.printStackTrace();
       }
     }
-  } 
+  }
 }

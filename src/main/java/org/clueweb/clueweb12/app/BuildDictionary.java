@@ -17,6 +17,7 @@
 package org.clueweb.clueweb12.app;
 
 import it.unimi.dsi.sux4j.mph.TwoStepsLcpMonotoneMinimalPerfectHashFunction;
+
 import it.unimi.dsi.util.FrontCodedStringList;
 import it.unimi.dsi.util.ShiftAddXorSignedStringMap;
 
@@ -65,7 +66,9 @@ public class BuildDictionary extends Configured implements Tool {
   private static final String HADOOP_OUTPUT_OPTION = "dictionary.path";
   private static final String HADOOP_TERMS_COUNT_OPTION = "terms.count";
 
-  protected static enum Terms { Total }
+  protected static enum Terms {
+    Total
+  }
 
   public static final String TERMS_DATA = "dictionary.terms";
   public static final String TERMS_ID_DATA = "dictionary.ids";
@@ -77,10 +80,9 @@ public class BuildDictionary extends Configured implements Tool {
   public static final String CF_BY_TERM_DATA = "cf.terms";
   public static final String CF_BY_ID_DATA = "cf.ids";
 
-  private static class MyReducer
-      extends Reducer<Text, PairOfIntLong, NullWritable, NullWritable> {
-    private FSDataOutputStream termsOut, idsOut, idsToTermOut,
-        dfByTermOut, cfByTermOut, dfByIntOut, cfByIntOut;
+  private static class MyReducer extends Reducer<Text, PairOfIntLong, NullWritable, NullWritable> {
+    private FSDataOutputStream termsOut, idsOut, idsToTermOut, dfByTermOut, cfByTermOut,
+        dfByIntOut, cfByIntOut;
     private int numTerms;
     private int[] seqNums = null;
     private int[] dfs = null;
@@ -153,13 +155,12 @@ public class BuildDictionary extends Configured implements Tool {
     }
 
     @Override
-    public void cleanup(
-        Reducer<Text, PairOfIntLong, NullWritable, NullWritable>.Context context)
+    public void cleanup(Reducer<Text, PairOfIntLong, NullWritable, NullWritable>.Context context)
         throws IOException {
       LOG.info("Starting cleanup.");
       if (curKeyIndex != numTerms) {
-        throw new RuntimeException("Total expected Terms: " + numTerms +
-            ", Total observed terms: " + curKeyIndex + "!");
+        throw new RuntimeException("Total expected Terms: " + numTerms + ", Total observed terms: "
+            + curKeyIndex + "!");
       }
       // Sort based on df and change seqNums accordingly.
       QuickSort.quicksortWithSecondary(seqNums, dfs, cfs, 0, numTerms - 1);
@@ -171,7 +172,8 @@ public class BuildDictionary extends Configured implements Tool {
       }
       cfs = null;
 
-      // Encode the sorted dfs into ids ==> df values erased and become ids instead. Note that first
+      // Encode the sorted dfs into ids ==> df values erased and become
+      // ids instead. Note that first
       // term id is 1.
       for (int i = 0; i < numTerms; i++) {
         dfs[i] = i + 1;
@@ -238,12 +240,12 @@ public class BuildDictionary extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg()
-        .withDescription("number of terms").create(COUNT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("number of terms")
+        .create(COUNT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -257,8 +259,8 @@ public class BuildDictionary extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
-        !cmdline.hasOption(COUNT_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(COUNT_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -275,8 +277,7 @@ public class BuildDictionary extends Configured implements Tool {
     Configuration conf = getConf();
 
     conf.set(HADOOP_OUTPUT_OPTION, output);
-    conf.setInt(HADOOP_TERMS_COUNT_OPTION,
-        Integer.parseInt(cmdline.getOptionValue(COUNT_OPTION)));
+    conf.setInt(HADOOP_TERMS_COUNT_OPTION, Integer.parseInt(cmdline.getOptionValue(COUNT_OPTION)));
     conf.set("mapreduce.map.memory.mb", "2048");
     conf.set("mapreduce.map.java.opts", "-Xmx2048m");
     conf.set("mapreduce.reduce.memory.mb", "2048");

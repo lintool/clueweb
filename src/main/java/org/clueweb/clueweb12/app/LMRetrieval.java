@@ -17,6 +17,7 @@
 package org.clueweb.clueweb12.app;
 
 import java.io.BufferedReader;
+
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Arrays;
@@ -58,7 +59,6 @@ import org.clueweb.data.PForDocVector;
 import org.clueweb.data.TermStatistics;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
-
 import tl.lin.data.array.IntArrayWritable;
 import tl.lin.data.pair.PairOfIntString;
 import tl.lin.data.pair.PairOfStringFloat;
@@ -69,34 +69,41 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 
 /**
- * <p>Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type: 
- * smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.</p>
- *
- * <p>Approach:</p>
- *
+ * <p>
+ * Implementation of language modeling. Retrieval parameter <i>smoothing</i> determines the type:
+ * smoothing<=1 means Jelineck-Mercer and smoothing>1 means Dirichlet.
+ * </p>
+ * 
+ * <p>
+ * Approach:
+ * </p>
+ * 
  * <ol>
- * <li> read the queries and convert into termids (based on the dictionary);
- *      make sure to use the same Lucene Analyzer as in ComputeTermStatistics.java
+ * <li>read the queries and convert into termids (based on the dictionary); make sure to use the
+ * same Lucene Analyzer as in ComputeTermStatistics.java
  * 
- * <li> MyMapper: walk over all document vectors
- *   <ul>
- *      <li> determine all queries which have at least one query term is occurring in the document
- *      <li> for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
- *   </ul>
- *
- * <li> MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
+ * <li>MyMapper: walk over all document vectors
+ * <ul>
+ * <li>determine all queries which have at least one query term is occurring in the document
+ * <li>for each such query, compute the LM score and emit composite key: (qid,docid), value: (score)
+ * </ul>
  * 
- * <li> MyReducer: for each query
- *   <ul>
- *      <li> create a priority queue (minimum heap): we only need to keep the topk highest probability scores
- *      <li> once all key/values are processed, "sort" the doc/score elements in the priority queue (already semi-done in heap)
- *      <li> output the results in TREC result file format
- *   </ul>
+ * <li>MyPartitioner: ensure that all keys (qid,docid) with the same qid end up in the same reducer
+ * 
+ * <li>MyReducer: for each query
+ * <ul>
+ * <li>create a priority queue (minimum heap): we only need to keep the topk highest probability
+ * scores
+ * <li>once all key/values are processed, "sort" the doc/score elements in the priority queue
+ * (already semi-done in heap)
+ * <li>output the results in TREC result file format
+ * </ul>
  * </ol>
- *
+ * 
  * @author Claudia Hauff
  */
 public class LMRetrieval extends Configured implements Tool {
+
   private static final Logger LOG = Logger.getLogger(LMRetrieval.class);
 
   /*
@@ -130,13 +137,13 @@ public class LMRetrieval extends Configured implements Tool {
   /*
    * Mapper outKey: (qid,docid), value: probability score
    */
-  private static class MyMapper extends
+  protected static class MyMapper extends
       Mapper<Text, IntArrayWritable, PairOfIntString, FloatWritable> {
 
     private static final PForDocVector DOC = new PForDocVector();
     private DefaultFrequencySortedDictionary dictionary;
-    private TermStatistics stats;
-    private double smoothingParam;
+    protected TermStatistics stats;
+    protected double smoothingParam;
 
     private static Analyzer ANALYZER;
 
@@ -144,8 +151,8 @@ public class LMRetrieval extends Configured implements Tool {
      * for quick access store the queries in two hashmaps: 1. key: termid, value: list of queries in
      * which the termid occurs 2. key: qid, value: list of termids that occur in the query
      */
-    private Map<Integer, Set<Integer>> termidQuerySet;
-    private Map<Integer, Set<Integer>> queryTermidSet;
+    protected Map<Integer, Set<Integer>> termidQuerySet;
+    protected Map<Integer, Set<Integer>> queryTermidSet;
 
     // complex key: (qid,docid)
     private static final PairOfIntString keyOut = new PairOfIntString();
@@ -214,11 +221,12 @@ public class LMRetrieval extends Configured implements Tool {
     }
 
     @Override
-    public void map(Text key, IntArrayWritable ints, Context context)
-        throws IOException, InterruptedException {
+    public void map(Text key, IntArrayWritable ints, Context context) throws IOException,
+        InterruptedException {
       PForDocVector.fromIntArrayWritable(ints, DOC);
 
       // determine which queries we care about for this document
+      // (i.e. at least one query term appears in the document)
       HashSet<Integer> queriesToDo = Sets.newHashSet();
 
       // tfMap of the document
@@ -237,7 +245,8 @@ public class LMRetrieval extends Configured implements Tool {
       }
 
       // for each of the interesting queries, compute log(P(q|d))
-      for (int qid : queriesToDo) {
+      //for (int qid : queriesToDo) {
+      for(int qid : queryTermidSet.keySet()) {
         double score = 0.0;
 
         for (int termid : queryTermidSet.get(qid)) {
@@ -360,16 +369,16 @@ public class LMRetrieval extends Configured implements Tool {
     options.addOption(OptionBuilder.withArgName("path").hasArg()
         .withDescription("input path (pfor format expected, add * to retrieve files)")
         .create(DOCVECTOR_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("queries").create(QUERIES_OPTION));
-    options.addOption(OptionBuilder.withArgName("float").hasArg()
-        .withDescription("smoothing").create(SMOOTHING));
-    options.addOption(OptionBuilder.withArgName("int").hasArg()
-        .withDescription("topk").create(TOPK));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("queries")
+        .create(QUERIES_OPTION));
+    options.addOption(OptionBuilder.withArgName("float").hasArg().withDescription("smoothing")
+        .create(SMOOTHING));
+    options.addOption(OptionBuilder.withArgName("int").hasArg().withDescription("topk")
+        .create(TOPK));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
 

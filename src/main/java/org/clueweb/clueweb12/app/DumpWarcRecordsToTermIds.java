@@ -53,11 +53,15 @@ import tl.lin.lucene.AnalyzerUtils;
 public class DumpWarcRecordsToTermIds extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToTermIds.class);
 
-  private static enum Records { TOTAL, PAGES, ERRORS, TOO_LONG };
+  private static enum Records {
+    TOTAL, PAGES, ERRORS, TOO_LONG
+  };
 
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
 
-  private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if long than this.
+  private static final int MAX_DOC_LENGTH = 512 * 1024; // Skip document if
+
+  // long than this.
 
   private static class MyMapper extends Mapper<LongWritable, ClueWeb12WarcRecord, Text, Text> {
     private static final Text DOCID = new Text();
@@ -74,9 +78,9 @@ public class DumpWarcRecordsToTermIds extends Configured implements Tool {
     }
 
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
-        throws IOException, InterruptedException {
-      
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
+
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -87,11 +91,13 @@ public class DumpWarcRecordsToTermIds extends Configured implements Tool {
         try {
           String content = doc.getContent();
 
-          // If the document is excessively long, it usually means that something is wrong (e.g., a
+          // If the document is excessively long, it usually means
+          // that something is wrong (e.g., a
           // binary object). Skip so the parsing doesn't choke.
-          // As an alternative, we might want to consider putting in a timeout, e.g.,
-          //    http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
-          if ( content.length() > MAX_DOC_LENGTH ) {
+          // As an alternative, we might want to consider putting in a
+          // timeout, e.g.,
+          // http://stackoverflow.com/questions/2275443/how-to-timeout-a-thread
+          if (content.length() > MAX_DOC_LENGTH) {
             LOG.info("Skipping " + docid + " due to excessive length: " + content.length());
             context.getCounter(Records.TOO_LONG).increment(1);
             context.write(DOCID, EMPTY);
@@ -115,9 +121,9 @@ public class DumpWarcRecordsToTermIds extends Configured implements Tool {
           System.arraycopy(termids, 0, copy, 0, len);
           DOC.set(Arrays.toString(copy));
           context.write(DOCID, DOC);
-        }
-        catch (Exception e) {
-          // If Jsoup throws any exceptions, catch and move on, but emit empty doc.
+        } catch (Exception e) {
+          // If Jsoup throws any exceptions, catch and move on, but
+          // emit empty doc.
           LOG.info("Error caught processing " + docid);
           context.getCounter(Records.ERRORS).increment(1);
           context.write(DOCID, EMPTY);
@@ -138,12 +144,12 @@ public class DumpWarcRecordsToTermIds extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
         .withDescription("number of reducers").create(REDUCERS_OPTION));
 
@@ -159,8 +165,8 @@ public class DumpWarcRecordsToTermIds extends Configured implements Tool {
       return -1;
     }
 
-    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION) ||
-        !cmdline.hasOption(DICTIONARY_OPTION)) {
+    if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
+        || !cmdline.hasOption(DICTIONARY_OPTION)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);

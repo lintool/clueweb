@@ -47,6 +47,7 @@ import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 import org.clueweb.data.VByteDocVector;
 import org.clueweb.dictionary.DefaultFrequencySortedDictionary;
 import org.clueweb.util.AnalyzerFactory;
+import org.clueweb.util.HTMLParserFactory;
 import org.jsoup.Jsoup;
 
 import tl.lin.lucene.AnalyzerUtils;
@@ -69,6 +70,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 
     private DefaultFrequencySortedDictionary dictionary;
 
+    private static String htmlParser;
+
     @Override
     public void setup(Context context) throws IOException {
       FileSystem fs = FileSystem.get(context.getConfiguration());
@@ -81,11 +84,12 @@ public class BuildVByteDocVectors extends Configured implements Tool {
         LOG.error("Error: proprocessing type not recognized. Abort " + this.getClass().getName());
         System.exit(1);
       }
+      htmlParser = context.getConfiguration().get(HTML_PARSER);
     }
 
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
-        throws IOException, InterruptedException {
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -108,7 +112,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
             return;
           }
 
-          String cleaned = Jsoup.parse(content).text();
+          String cleaned = HTMLParserFactory.parse(htmlParser, content);
           List<String> tokens = AnalyzerUtils.parse(ANALYZER, cleaned);
 
           int len = 0;
@@ -139,6 +143,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
   public static final String DICTIONARY_OPTION = "dictionary";
   public static final String REDUCERS_OPTION = "reducers";
   public static final String PREPROCESSING = "preprocessing";
+  public static final String HTML_PARSER = "htmlParser";
 
   /**
    * Runs this tool.
@@ -147,16 +152,18 @@ public class BuildVByteDocVectors extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("dictionary").create(DICTIONARY_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("dictionary")
+        .create(DICTIONARY_OPTION));
     options.addOption(OptionBuilder.withArgName("num").hasArg()
         .withDescription("number of reducers").create(REDUCERS_OPTION));
     options.addOption(OptionBuilder.withArgName("string " + AnalyzerFactory.getOptions()).hasArg()
         .withDescription("preprocessing").create(PREPROCESSING));
+    options.addOption(OptionBuilder.withArgName("string " + HTMLParserFactory.getOptions())
+        .hasArg().withDescription("htmlParser").create(HTML_PARSER));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -171,7 +178,8 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     }
 
     if (!cmdline.hasOption(INPUT_OPTION) || !cmdline.hasOption(OUTPUT_OPTION)
-        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(PREPROCESSING)) {
+        || !cmdline.hasOption(DICTIONARY_OPTION) || !cmdline.hasOption(PREPROCESSING)
+        || !cmdline.hasOption(HTML_PARSER)) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(this.getClass().getName(), options);
       ToolRunner.printGenericCommandUsage(System.out);
@@ -182,6 +190,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     String output = cmdline.getOptionValue(OUTPUT_OPTION);
     String dictionary = cmdline.getOptionValue(DICTIONARY_OPTION);
     String preprocessing = cmdline.getOptionValue(PREPROCESSING);
+    String htmlParser = cmdline.getOptionValue(HTML_PARSER);
 
     Job job = new Job(getConf(), BuildVByteDocVectors.class.getSimpleName() + ":" + input);
     job.setJarByClass(BuildVByteDocVectors.class);
@@ -191,6 +200,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
     LOG.info(" - output: " + output);
     LOG.info(" - dictionary: " + dictionary);
     LOG.info(" - preprocessing: " + preprocessing);
+    LOG.info(" - htmlParser: " + htmlParser);
 
     if (cmdline.hasOption(REDUCERS_OPTION)) {
       int numReducers = Integer.parseInt(cmdline.getOptionValue(REDUCERS_OPTION));
@@ -205,6 +215,7 @@ public class BuildVByteDocVectors extends Configured implements Tool {
 
     job.getConfiguration().set(DICTIONARY_OPTION, dictionary);
     job.getConfiguration().set(PREPROCESSING, preprocessing);
+    job.getConfiguration().set(HTML_PARSER, htmlParser);
 
     job.setInputFormatClass(ClueWeb12InputFormat.class);
     job.setOutputFormatClass(SequenceFileOutputFormat.class);

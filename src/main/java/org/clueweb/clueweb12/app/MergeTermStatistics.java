@@ -48,14 +48,16 @@ public class MergeTermStatistics extends Configured implements Tool {
   private static final String HADOOP_DF_MIN_OPTION = "df.min";
   private static final String HADOOP_DF_MAX_OPTION = "df.max";
 
-  private static final int MIN_DF_DEFAULT = 100;        // Throw away terms with df less than this.
+  private static final int MIN_DF_DEFAULT = 100; // Throw away terms with df
+
+  // less than this.
 
   private static class MyCombiner extends Reducer<Text, PairOfIntLong, Text, PairOfIntLong> {
     private static final PairOfIntLong output = new PairOfIntLong();
 
     @Override
     public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
+        throws IOException, InterruptedException {
       int df = 0;
       long cf = 0;
       for (PairOfIntLong pair : values) {
@@ -81,7 +83,7 @@ public class MergeTermStatistics extends Configured implements Tool {
 
     @Override
     public void reduce(Text key, Iterable<PairOfIntLong> values, Context context)
-    throws IOException, InterruptedException {
+        throws IOException, InterruptedException {
       int df = 0;
       long cf = 0;
       for (PairOfIntLong pair : values) {
@@ -107,12 +109,12 @@ public class MergeTermStatistics extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg()
-        .withDescription("minimum df").create(DF_MIN_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("minimum df")
+        .create(DF_MIN_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();
@@ -143,7 +145,7 @@ public class MergeTermStatistics extends Configured implements Tool {
     Job job = new Job(getConf(), MergeTermStatistics.class.getSimpleName() + ":" + input);
     job.setJarByClass(MergeTermStatistics.class);
 
-    job.setNumReduceTasks(100);
+    job.setNumReduceTasks(1);
 
     if (cmdline.hasOption(DF_MIN_OPTION)) {
       int dfMin = Integer.parseInt(cmdline.getOptionValue(DF_MIN_OPTION));

@@ -1,3 +1,19 @@
+/*
+ * ClueWeb Tools: Hadoop tools for manipulating ClueWeb collections
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you
+ * may not use this file except in compliance with the License. You may
+ * obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+ * implied. See the License for the specific language governing
+ * permissions and limitations under the License.
+ */
+
 package org.clueweb.data;
 
 import static org.junit.Assert.assertEquals;
@@ -15,7 +31,7 @@ public class VByteDocVectorTest {
   @Test
   public void testSerialize1() throws Exception {
     int[] doc = new int[256];
-    for (int i = 0; i<256; i++) {
+    for (int i = 0; i < 256; i++) {
       doc[i] = RANDOM.nextInt(10000);
     }
 
@@ -35,7 +51,7 @@ public class VByteDocVectorTest {
   @Test
   public void testSerialize2() throws Exception {
     BytesWritable bytes = new BytesWritable();
-    VByteDocVector.toBytesWritable(bytes,new int[] {}, 0);
+    VByteDocVector.toBytesWritable(bytes, new int[] {}, 0);
 
     VByteDocVector v = new VByteDocVector();
     VByteDocVector.fromBytesWritable(bytes, v);
@@ -48,7 +64,7 @@ public class VByteDocVectorTest {
   @Test
   public void testSerialize3() throws Exception {
     BytesWritable bytes = new BytesWritable();
-    VByteDocVector.toBytesWritable(bytes,new int[] {}, 0);
+    VByteDocVector.toBytesWritable(bytes, new int[] {}, 0);
 
     VByteDocVector v = new VByteDocVector();
     VByteDocVector.fromBytesWritable(bytes, v);

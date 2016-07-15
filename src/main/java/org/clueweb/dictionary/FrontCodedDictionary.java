@@ -40,7 +40,8 @@ public class FrontCodedDictionary implements Writable, LexicographicallySortedDi
   private FrontCodedStringList stringList;
   private ShiftAddXorSignedStringMap dictionary;
 
-  public FrontCodedDictionary() {}
+  public FrontCodedDictionary() {
+  }
 
   @Override
   public int getId(String term) {

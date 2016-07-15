@@ -30,8 +30,8 @@ public class DictionaryTransformationStrategy {
   }
 
   public static class WritableComparator extends org.apache.hadoop.io.WritableComparator {
-    private final TransformationStrategy<CharSequence> strategy =
-        DictionaryTransformationStrategy.getStrategy();
+    private final TransformationStrategy<CharSequence> strategy = DictionaryTransformationStrategy
+        .getStrategy();
 
     public WritableComparator() {
       super(Text.class);
@@ -41,10 +41,10 @@ public class DictionaryTransformationStrategy {
       int n1 = WritableUtils.decodeVIntSize(b1[s1]);
       int n2 = WritableUtils.decodeVIntSize(b2[s2]);
 
-      String t1=null, t2=null;
+      String t1 = null, t2 = null;
       try {
-        t1 = Text.decode(b1, s1+n1, l1-n1);
-        t2 = Text.decode(b2, s2+n2, l2-n2);
+        t1 = Text.decode(b1, s1 + n1, l1 - n1);
+        t2 = Text.decode(b2, s2 + n2, l2 - n2);
       } catch (CharacterCodingException e) {
         throw new RuntimeException(e);
       }

@@ -32,7 +32,7 @@ import org.clueweb.data.TermStatistics;
 /**
  * An implementation of {@link FrequencySortedDictionary}. Term ids start at 1, which corresponds to
  * the most frequent term. Term id 2 is the second most frequent term, etc.
- *
+ * 
  * @author Jimmy Lin
  */
 public class DefaultFrequencySortedDictionary implements FrequencySortedDictionary {
@@ -90,9 +90,12 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     if (id > ids.length || id == 0 || idsToTerm == null) {
       return null;
     }
-    String term = dictionary.getTerm(idsToTerm[id - 1]);
-
-    return term;
+    try {
+      String term = dictionary.getTerm(idsToTerm[id - 1]);
+      return term;
+    }
+    catch(Exception e) {;} //catches errors observed in it.unimi.dsi.util.FrontCodedStringList.byte2Char (Malformed internal UTF-8 encoding)
+    return null;
   }
 
   /**
@@ -137,8 +140,7 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
     Configuration conf = new Configuration();
     FileSystem fs = FileSystem.get(conf);
 
-    DefaultFrequencySortedDictionary dictionary =
-        new DefaultFrequencySortedDictionary(path, fs);
+    DefaultFrequencySortedDictionary dictionary = new DefaultFrequencySortedDictionary(path, fs);
 
     int nTerms = dictionary.size();
     out.println("number of terms: " + nTerms);
@@ -181,8 +183,8 @@ public class DefaultFrequencySortedDictionary implements FrequencySortedDictiona
         String term = tokens[1];
 
         out.println("term=" + term + ", termid=" + dictionary.getId(term));
-        out.println("  df = " + stats.getDf(dictionary.getId(term)) +
-            ", cf = " + stats.getCf(dictionary.getId(term)));
+        out.println("  df = " + stats.getDf(dictionary.getId(term)) + ", cf = "
+            + stats.getCf(dictionary.getId(term)));
       } else {
         out.println("Error: unrecognized command!");
         out.print("lookup > ");

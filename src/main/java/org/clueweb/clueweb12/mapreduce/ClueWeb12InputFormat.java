@@ -48,7 +48,7 @@ public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb1
   protected boolean isSplitable(JobContext context, Path filename) {
     return false;
   }
-  
+
   public class ClueWarcRecordReader extends RecordReader<LongWritable, ClueWeb12WarcRecord> {
     private CompressionCodecFactory compressionCodecs = null;
     private long start;

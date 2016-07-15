@@ -17,6 +17,7 @@
 package org.clueweb.data;
 
 import java.io.IOException;
+import java.util.HashMap;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -42,17 +43,18 @@ public class TermStatistics {
 
   /**
    * Creates a {@code CfTable} object.
-   *
+   * 
    * @param file collection frequency data file
    * @throws IOException
    */
+
   public TermStatistics(Path file) throws IOException {
     this(file, FileSystem.get(new Configuration()));
   }
 
   /**
    * Creates a {@code CfTable} object.
-   *
+   * 
    * @param file collection frequency data file
    * @param fs FileSystem to read from
    * @throws IOException
@@ -81,7 +83,7 @@ public class TermStatistics {
     in.close();
 
     in = fs.open(new Path(file, BuildDictionary.DF_BY_ID_DATA));
-    if (numTerms != in.readInt() ) {
+    if (numTerms != in.readInt()) {
       throw new IOException("df data and cf data should have the same number of entries!");
     }
 

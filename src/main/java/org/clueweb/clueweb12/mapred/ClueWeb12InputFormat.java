@@ -81,12 +81,13 @@ public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb1
   /**
    * Just return the record reader
    */
-  public RecordReader<LongWritable, ClueWeb12WarcRecord> getRecordReader(InputSplit split, JobConf conf,
-      Reporter reporter) throws IOException {
+  public RecordReader<LongWritable, ClueWeb12WarcRecord> getRecordReader(InputSplit split,
+      JobConf conf, Reporter reporter) throws IOException {
     return new ClueWarcRecordReader(conf, (FileSplit) split);
   }
 
-  public static class ClueWarcRecordReader implements RecordReader<LongWritable, ClueWeb12WarcRecord> {
+  public static class ClueWarcRecordReader implements
+      RecordReader<LongWritable, ClueWeb12WarcRecord> {
     private long recordCount = 1;
     private Path path = null;
     private DataInputStream input = null;
@@ -147,4 +148,3 @@ public class ClueWeb12InputFormat extends FileInputFormat<LongWritable, ClueWeb1
     }
   }
 }
-

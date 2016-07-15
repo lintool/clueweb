@@ -58,7 +58,10 @@ import com.google.common.base.Joiner;
 public class DumpWarcRecordsToPlainText extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(DumpWarcRecordsToPlainText.class);
 
-  private static enum Records { TOTAL, PAGES, ERRORS };
+  private static enum Records {
+    TOTAL, PAGES, ERRORS
+  };
+
   private static final Analyzer ANALYZER = new StandardAnalyzer(Version.LUCENE_43);
   private static final Joiner JOINER = Joiner.on("|");
 
@@ -67,7 +70,8 @@ public class DumpWarcRecordsToPlainText extends Configured implements Tool {
     private static final Text KEY = new Text();
     private static final Text VALUE = new Text();
 
-    public void configure(JobConf job) {}
+    public void configure(JobConf job) {
+    }
 
     public void map(Writable key, ClueWeb12WarcRecord doc, OutputCollector<Text, Text> output,
         Reporter reporter) throws IOException {
@@ -90,7 +94,8 @@ public class DumpWarcRecordsToPlainText extends Configured implements Tool {
     }
   }
 
-  public DumpWarcRecordsToPlainText() {}
+  public DumpWarcRecordsToPlainText() {
+  }
 
   public static final String INPUT_OPTION = "input";
   public static final String OUTPUT_OPTION = "output";
@@ -102,10 +107,10 @@ public class DumpWarcRecordsToPlainText extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("output path").create(OUTPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("output path")
+        .create(OUTPUT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();

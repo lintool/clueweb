@@ -43,13 +43,15 @@ import org.clueweb.clueweb12.mapreduce.ClueWeb12InputFormat;
 public class CountWarcRecordsNew extends Configured implements Tool {
   private static final Logger LOG = Logger.getLogger(CountWarcRecordsNew.class);
 
-  private static enum Records { TOTAL, PAGES };
+  private static enum Records {
+    TOTAL, PAGES
+  };
 
-  private static class MyMapper
-      extends Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
+  private static class MyMapper extends
+      Mapper<LongWritable, ClueWeb12WarcRecord, NullWritable, NullWritable> {
     @Override
-    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context)
-        throws IOException, InterruptedException {
+    public void map(LongWritable key, ClueWeb12WarcRecord doc, Context context) throws IOException,
+        InterruptedException {
       context.getCounter(Records.TOTAL).increment(1);
 
       String docid = doc.getHeaderMetadataItem("WARC-TREC-ID");
@@ -59,7 +61,8 @@ public class CountWarcRecordsNew extends Configured implements Tool {
     }
   }
 
-  public CountWarcRecordsNew() {}
+  public CountWarcRecordsNew() {
+  }
 
   public static final String INPUT_OPTION = "input";
 
@@ -70,8 +73,8 @@ public class CountWarcRecordsNew extends Configured implements Tool {
   public int run(String[] args) throws Exception {
     Options options = new Options();
 
-    options.addOption(OptionBuilder.withArgName("path").hasArg()
-        .withDescription("input path").create(INPUT_OPTION));
+    options.addOption(OptionBuilder.withArgName("path").hasArg().withDescription("input path")
+        .create(INPUT_OPTION));
 
     CommandLine cmdline;
     CommandLineParser parser = new GnuParser();

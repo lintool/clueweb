@@ -37,12 +37,12 @@ public class LookupWarcTrecIdMapping extends Configured implements Tool {
   @SuppressWarnings("static-access")
   public int run(String[] args) throws Exception {
     Options options = new Options();
-    options.addOption(OptionBuilder.withArgName("dir").hasArg()
-        .withDescription("index location").create(INDEX_OPTION));
-    options.addOption(OptionBuilder.withArgName("id").hasArg()
-        .withDescription("WARC-TREC-ID").create(DOCID_OPTION));
-    options.addOption(OptionBuilder.withArgName("num").hasArg()
-        .withDescription("docno").create(DOCNO_OPTION));
+    options.addOption(OptionBuilder.withArgName("dir").hasArg().withDescription("index location")
+        .create(INDEX_OPTION));
+    options.addOption(OptionBuilder.withArgName("id").hasArg().withDescription("WARC-TREC-ID")
+        .create(DOCID_OPTION));
+    options.addOption(OptionBuilder.withArgName("num").hasArg().withDescription("docno")
+        .create(DOCNO_OPTION));
 
     CommandLine cmdline = null;
     CommandLineParser parser = new GnuParser();
@@ -53,8 +53,8 @@ public class LookupWarcTrecIdMapping extends Configured implements Tool {
       System.exit(-1);
     }
 
-    if (!cmdline.hasOption(INDEX_OPTION) || 
-        !(cmdline.hasOption(DOCID_OPTION) || cmdline.hasOption(DOCNO_OPTION))) {
+    if (!cmdline.hasOption(INDEX_OPTION)
+        || !(cmdline.hasOption(DOCID_OPTION) || cmdline.hasOption(DOCNO_OPTION))) {
       HelpFormatter formatter = new HelpFormatter();
       formatter.printHelp(LookupWarcTrecIdMapping.class.getCanonicalName(), options);
       System.exit(-1);

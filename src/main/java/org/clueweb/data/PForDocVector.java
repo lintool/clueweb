@@ -27,7 +27,8 @@ public class PForDocVector {
 
   private int[] termids;
 
-  public PForDocVector() {}
+  public PForDocVector() {
+  }
 
   public int[] getTermIds() {
     return termids;
@@ -49,7 +50,7 @@ public class PForDocVector {
       }
 
       if (doc.termids.length < 128) {
-        VB.uncompress(compressed, inPos, in.size()-1, doc.termids, outPos);
+        VB.uncompress(compressed, inPos, in.size() - 1, doc.termids, outPos);
         return;
       }
 
@@ -69,7 +70,8 @@ public class PForDocVector {
   }
 
   public static void toIntArrayWritable(IntArrayWritable ints, int[] termids, int length) {
-    // Remember, the number of terms to serialize is length; the array might be longer.
+    // Remember, the number of terms to serialize is length; the array might
+    // be longer.
     try {
       if (termids == null) {
         termids = new int[] {};
@@ -89,7 +91,7 @@ public class PForDocVector {
         return;
       }
 
-      P4.compress(termids, inPos, (length/128)*128, out, outPos);
+      P4.compress(termids, inPos, (length / 128) * 128, out, outPos);
 
       if (length % 128 == 0) {
         ints.setArray(out, outPos.get());

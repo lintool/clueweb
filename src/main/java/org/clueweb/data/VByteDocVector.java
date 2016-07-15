@@ -28,7 +28,8 @@ import org.apache.hadoop.io.WritableUtils;
 public class VByteDocVector implements DocVector {
   private int[] termids;
 
-  public VByteDocVector() {}
+  public VByteDocVector() {
+  }
 
   public int[] getTermIds() {
     return termids;
