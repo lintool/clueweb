@@ -166,6 +166,11 @@ The parameters are:
 + if `keephtml` is `false`, `htmlParser` needs to be provided (`tika` or `jsoup`)
 + `output`: folder where the documents' content is stored - one file per docid
 
+Note, that currently the `clueweb09.app.DocumentExtractor` version is different from the `clueweb12.app.DocumentExtractor` version:
++ all documents in the input path can be extracted (set `docidsfile` to `-1`)
++ duplicate removal can be enabled by setting `removeDuplicates` to `true`
++ the title/body content are output separately in a format suitable for Solr 
+
 
 Retrieval runs
 --------------
