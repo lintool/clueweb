@@ -82,7 +82,7 @@ public class DocumentExtractor extends Configured implements Tool {
   private static String htmlParser;
   private static boolean writeAll;
   private static final String EMPTY = "";
-  private static final int MAX_DOCS_IN_FILE = 1000;//number of clueweb docs written to a single file
+  private static final int MAX_DOCS_IN_FILE = 10000;//number of clueweb docs written to a single file
   private static final double COSINE_DUPLICATION_THRESHOLD = 0.9; //remove duplicates (documents with a higher similarity threshold than given here)
   
   private static class MyMapper extends
@@ -169,7 +169,7 @@ public class DocumentExtractor extends Configured implements Tool {
       FSDataOutputStream fsout = fs.create(p);
       BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fsout));
       
-      //one-off
+      //hardcoded output format (here to make it suitable for Solr)
       bw.write("<add>");
       bw.newLine();
       
@@ -208,6 +208,8 @@ public class DocumentExtractor extends Configured implements Tool {
         }
         
         context.getCounter(Records.DOCUMENTS_WRITTEN_TO_FILE).increment(1);
+        
+        //hardcoded output format
         bw.write("<doc>");
         bw.write("<field name=\"id\">"+docid+"</field>");bw.newLine();
         bw.write("<field name=\"duplicate\">false</field>"); bw.newLine();
@@ -215,12 +217,13 @@ public class DocumentExtractor extends Configured implements Tool {
         bw.write("<field name=\"document\">"); bw.write(docidMap.get(docid)); bw.write("</field></doc>");
         bw.newLine();
       }
-      //one-off
+      //hardcoded output format
       bw.write("</add>");
       bw.newLine();
       bw.close();
       fsout.close();
       
+      //once the data has been written to file, clear the objects
       docidMap.clear();
       titleMap.clear();
       shinglings.clear();
